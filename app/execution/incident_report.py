@@ -1,8 +1,8 @@
 """The incident report: facts read from the graph, plus prose.
 
 The facts are exactly what incident_facts.cypher returns. The prose is written from those facts only: by the
-language model when one is configured (the Record keeper passes its writer), otherwise by the fixed template
-below. `prose_by` says which, so nobody mistakes a template for a model's summary.
+language model when one is configured and answers (the Record keeper passes its writer), otherwise by the fixed
+template below. `prose_by` is the model name or 'template', so nobody mistakes a template for a model's summary.
 """
 
 import json
@@ -49,9 +49,11 @@ def template_prose(f: dict) -> str:
 
 
 def write(tg: TenantGraph, incident: str, actor: str, writer=None) -> dict:
-    """`writer(facts) -> str` writes prose from the facts (a language model); without one the template is used."""
+    """`writer(facts)` returns (prose, model name) written from the facts, or None; then the template is used and
+    `prose_by` is 'template'. A report is never labelled as model-written unless the model wrote it."""
     f = facts(tg, incident)
-    prose, by = (writer(f), "llm") if writer else (template_prose(f), "template")
+    out = writer(f) if writer else None
+    prose, by = out if out else (template_prose(f), "template")
     rid = "IR-" + ids.task_id()[4:]
     tg.write("incident_report_write", {"incident": incident, "id": rid, "ts": clock.now(),
                                        "facts": json.dumps(f, sort_keys=True, default=str), "prose": prose,

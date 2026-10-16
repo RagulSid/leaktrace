@@ -1,2 +1,3 @@
-MATCH (w:WorkOrder {id: $id})-[:FOR]->(i:Incident)
-RETURN properties(w) AS work_order, i.id AS incident
+MATCH (w:WorkOrder {id: $id})
+CALL { WITH w OPTIONAL MATCH (w)-[:FOR]->(i:Incident) RETURN i.id AS incident }
+RETURN properties(w) AS work_order, incident

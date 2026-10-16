@@ -4,6 +4,7 @@ Every route that touches data works on the graph of the tenant in the caller's v
 If FalkorDB is unreachable every route answers 503: there is no cache and no fallback.
 """
 
+import logging
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -11,11 +12,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.agents import investigate
-from app.api.auth import Principal, login, require
+from app import config
+from app.api.auth import Principal, login, require, seeded
 from app.agents import runtime as helpers
 from app.execution import incident_report, work_orders
 from app.execution import service as execution
-from app.graph.client import GraphUnavailable, rows
+from app.graph.client import GraphUnavailable, TenantGraph, rows
 from app.graph.importer import import_pack
 from app.graph.schema import ensure_schema
 from app.intake.readings import BadReadings, ingest_readings
@@ -23,12 +25,35 @@ from app.intake.reports import UnknownAsset, ingest_report, report_status
 from app.memory import episodic
 from app.permissions import APPROVERS, DECIDERS, FIELD, REPORTERS, VIEWERS
 
-app = FastAPI(title="LeakTrace", version="0.2.0")
+app = FastAPI(title="LeakTrace", version="0.3.0")
+log = logging.getLogger("uvicorn.error")  # uvicorn's own logger, so the line shows in the server output
+
+HINTS = {
+    "not_reachable": "start it with `docker compose up -d`; `docker ps -a` and `docker logs leaktrace-falkordb` say if it exited",
+    "graph_empty": "seed it with `python -m scenario_generator.demo --tenant demo` (or `python -m app.cli ensure-demo`)",
+}
 
 
 @app.exception_handler(GraphUnavailable)
-def _graph_down(_: Request, e: GraphUnavailable):
-    return JSONResponse(status_code=503, content={"error": "graph_unavailable", "detail": str(e)})
+def _graph_down(request: Request, e: GraphUnavailable):
+    """503 with what is wrong (reason, host, port, graph) for the Details drawer; the screens show plain words."""
+    log.warning("FalkorDB %s on %s %s: host=%s port=%s graph=%s%s. %s. Fix: %s", e.reason.replace("_", " "),
+                request.method, request.url.path, e.host, e.port, e.graph or "-",
+                f" query={e.query}" if e.query else "", e, HINTS.get(e.reason, ""))
+    return JSONResponse(status_code=503, content={"error": "graph_unavailable", **e.where(), "detail": str(e)})
+
+
+@app.get("/health")
+def health():
+    """Is FalkorDB reachable, and is the demo customer seeded (users and a map)? Two yes/no answers, no ids."""
+    reachable = demo_seeded = False
+    try:
+        counts = seeded(TenantGraph(config.DEMO_TENANT))
+        reachable, demo_seeded = True, counts["users"] > 0 and counts["entities"] > 0
+    except GraphUnavailable as e:
+        reachable = e.reason == "graph_empty"
+    return JSONResponse(status_code=200 if reachable and demo_seeded else 503,
+                        content={"falkordb_reachable": reachable, "demo_seeded": demo_seeded})
 
 
 @app.exception_handler(execution.ExecError)
@@ -275,3 +300,19 @@ def tasks_result(task: str, body: ResultIn, p: Principal = Depends(require(*FIEL
 @app.get("/agents/timeline")
 def agents_timeline(incident: str, p: Principal = Depends(require(*VIEWERS))):
     return episodic.for_incident(p.graph(), incident)
+
+
+# ---------------------------------------------------------------- screens
+from pathlib import Path as _Path  # noqa: E402
+
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from app.api import brain, how_it_works, views  # noqa: E402
+
+app.include_router(views.router)
+app.include_router(brain.router)
+app.include_router(how_it_works.router)
+
+_WEB = _Path(__file__).resolve().parents[2] / "web" / "dist"
+if _WEB.is_dir():  # the built web app, served from the same origin as the API
+    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")

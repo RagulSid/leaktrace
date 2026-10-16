@@ -14,6 +14,7 @@ from functools import cache
 from falkordb import FalkorDB
 from falkordb.query_result import QueryResult
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ResponseError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app import config
@@ -22,7 +23,24 @@ from app.graph.tenancy import graph_name
 
 
 class GraphUnavailable(RuntimeError):
-    """FalkorDB cannot be reached. Nothing falls back to a cache: callers must fail loudly."""
+    """FalkorDB cannot be used. Nothing falls back to a cache: callers must fail loudly.
+
+    `reason` says which: "not_reachable" (no server at host:port, or the connection dropped mid-query) or
+    "graph_empty" (the server answers but this customer's graph is missing or has nothing in it). The API puts
+    reason, host, port and graph in the 503 body for the Details drawer and the server log; never a password."""
+
+    def __init__(self, message: str, *, reason: str = "not_reachable", graph: str | None = None,
+                 query: str | None = None):
+        super().__init__(message)
+        self.reason, self.graph, self.query = reason, graph, query
+        self.host, self.port = config.FALKORDB_HOST, config.FALKORDB_PORT
+
+    def where(self) -> dict:
+        return {"reason": self.reason, "host": self.host, "port": self.port, "graph": self.graph}
+
+
+def _missing_graph(e: Exception) -> bool:
+    return "empty key" in str(e)  # GRAPH.RO_QUERY on a graph that does not exist
 
 
 @dataclass
@@ -78,7 +96,11 @@ class TenantGraph:
     def __init__(self, tenant: str, db: FalkorDB | None = None):
         self.tenant = tenant
         self.name = graph_name(tenant)
-        self._g = (db or get_db()).select_graph(self.name)
+        try:
+            self._g = (db or get_db()).select_graph(self.name)
+        except GraphUnavailable as e:
+            e.graph = self.name
+            raise
 
     def read(self, query_name: str, params: dict | None = None, timeout_ms: int | None = None) -> QueryResult:
         return self._run(query_name, queries.load(query_name), params, "read", timeout_ms or config.READ_TIMEOUT_MS)
@@ -115,8 +137,17 @@ class TenantGraph:
             entry.ms, entry.error = (time.perf_counter() - t0) * 1000, f"graph unavailable: {e}"
             QUERY_LOG.append(entry)
             raise GraphUnavailable(
-                f"FalkorDB is not reachable at {config.FALKORDB_HOST}:{config.FALKORDB_PORT} ({e})"
+                f"FalkorDB is not reachable at {config.FALKORDB_HOST}:{config.FALKORDB_PORT}: the connection failed "
+                f"during {mode} query {name} ({e}). If the container exited, `docker logs leaktrace-falkordb` says why.",
+                graph=self.name, query=name,
             ) from e
+        except ResponseError as e:
+            entry.ms, entry.error = (time.perf_counter() - t0) * 1000, str(e)
+            QUERY_LOG.append(entry)
+            if _missing_graph(e):
+                raise GraphUnavailable(f"graph {self.name} does not exist on {config.FALKORDB_HOST}:{config.FALKORDB_PORT}",
+                                       reason="graph_empty", graph=self.name, query=name) from e
+            raise
         except Exception as e:
             entry.ms, entry.error = (time.perf_counter() - t0) * 1000, str(e)
             QUERY_LOG.append(entry)

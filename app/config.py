@@ -84,11 +84,29 @@ BREAK_GLASS_WAIT_S = _int("LEAKTRACE_BREAK_GLASS_WAIT_S", 300)
 MIN_PLAYBOOK_SUCCESSES = _int("LEAKTRACE_MIN_PLAYBOOK_SUCCESSES", 3)
 
 # ---------------------------------------------------------------- helpers (agents)
-# "llm": choose tools with a language model (needs ANTHROPIC_API_KEY); "rules": the fixed offline chooser;
-# "auto": llm when a key is set, else rules.
+# "model": choose tools with a language model behind an OpenAI-compatible chat API; "rules": the fixed offline
+# chooser; "auto": the model when LLM_BASE_URL, LLM_API_KEY and LLM_MODEL are all set, otherwise the rules.
 AGENT_CHOOSER = os.getenv("LEAKTRACE_AGENT_CHOOSER", "auto")
-LLM_MODEL = os.getenv("LEAKTRACE_LLM_MODEL", "claude-opus-5-5")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL") or None  # e.g. https://generativelanguage.googleapis.com/v1beta/openai
+LLM_API_KEY = os.getenv("LLM_API_KEY") or None
+LLM_MODEL = os.getenv("LLM_MODEL") or None
 LLM_MAX_TOKENS = _int("LEAKTRACE_LLM_MAX_TOKENS", 2048)
+# Thinking models (Gemini Flash) think before answering unless told not to: "low" answered a one-word prompt in
+# 4.7 s versus 11.6 s by default (measured 2026-10-16). Empty: the parameter is not sent.
+LLM_REASONING_EFFORT = os.getenv("LEAKTRACE_LLM_REASONING_EFFORT") or None
+LLM_TIMEOUT_S = _float("LEAKTRACE_LLM_TIMEOUT_S", 8.0)  # per model call; a timeout hands the run to the rules
+LLM_MAX_CALLS_PER_RUN = _int("LEAKTRACE_LLM_MAX_CALLS_PER_RUN", 60)  # model calls per helper run, then the rules
 AGENT_MAX_STEPS = _int("LEAKTRACE_AGENT_MAX_STEPS", 30)  # tool calls per task before it is handed to people
 AGENT_LEASE_S = _int("LEAKTRACE_AGENT_LEASE_S", 120)
 AUTO_TRIAGE = os.getenv("LEAKTRACE_AUTO_TRIAGE", "1") == "1"  # a new problem gets an Intake step
+
+# ---------------------------------------------------------------- Ask LeakTrace (answers with sources)
+# Passage vectors: "hash" = hashed word counts computed here (no model, no network; finds passages that share
+# words, not meaning). The vector index dimension must match EMBED_DIM.
+EMBED_PROVIDER = os.getenv("LEAKTRACE_EMBED", "hash")
+EMBED_DIM = _int("LEAKTRACE_EMBED_DIM", 256)
+# Who words the answer: "template" (fixed sentences), "model" (the chat model above rewrites the template answer;
+# its citations are checked), "auto" (the model when LLM_* are all set, otherwise templates).
+ASK_PHRASER = os.getenv("LEAKTRACE_ASK_PHRASER", "auto")
+ASK_PASSAGE_MAX_DISTANCE = _float("LEAKTRACE_ASK_PASSAGE_MAX_DISTANCE", 0.8)  # cosine distance; lower is closer
+ASK_PASSAGE_MIN_SHARED_WORDS = _int("LEAKTRACE_ASK_PASSAGE_MIN_SHARED_WORDS", 2)

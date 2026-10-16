@@ -18,7 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.exceptions import ResponseError
 
 from app import config
-from app.graph.client import TenantGraph, rows
+from app.graph.client import GraphUnavailable, TenantGraph, rows
 from app.graph.tenancy import InvalidTenant
 
 ROLES = ("staff", "operator", "tech", "manager", "authority", "integration")
@@ -56,14 +56,31 @@ def issue_token(user: str, role: str, tenant: str, ttl_s: int | None = None) -> 
     return f"{claims}.{sig}", exp
 
 
+def seeded(tg: TenantGraph) -> dict:
+    """How many users and things on the map a customer's graph holds (GraphUnavailable "graph_empty" if the
+    graph does not exist)."""
+    return rows(tg.read("graph_seeded"))[0]
+
+
+def _empty(tg: TenantGraph) -> GraphUnavailable:
+    return GraphUnavailable(f"graph {tg.name} has no users: the customer was never seeded or was wiped",
+                            reason="graph_empty", graph=tg.name)
+
+
 def login(tenant: str, user: str, password: str) -> dict | None:
     try:
         tg = TenantGraph(tenant)
         found = rows(tg.read("user_get", {"id": user}))
+    except GraphUnavailable as e:
+        if e.reason == "graph_empty" and tenant != config.DEMO_TENANT:
+            return None  # unknown tenant looks the same as a wrong password
+        raise  # FalkorDB down, or the public demo customer's graph is missing: say so
     except (InvalidTenant, ResponseError):
-        return None  # unknown tenant looks the same as a wrong password
+        return None
     if not found:
         hash_password(password)  # same work either way
+        if tenant == config.DEMO_TENANT and seeded(tg)["users"] == 0:
+            raise _empty(tg)
         return None
     u = found[0]
     if not hmac.compare_digest(hash_password(password, u["pw_salt"])[0], u["pw_hash"]):
@@ -79,7 +96,13 @@ class Principal:
     tenant: str
 
     def graph(self) -> TenantGraph:
-        return TenantGraph(self.tenant)
+        """The graph of the tenant in the verified token. A valid token on a graph with no users means the
+        graph was wiped after sign-in (for example a FalkorDB crash before its last save): say so instead of
+        answering with empty lists."""
+        tg = TenantGraph(self.tenant)
+        if seeded(tg)["users"] == 0:
+            raise _empty(tg)
+        return tg
 
 
 def verify(token: str) -> Principal:

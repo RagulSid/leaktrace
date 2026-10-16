@@ -1,0 +1,103 @@
+{
+  "source": "synthetic",
+  "note": "Practice data. Every person, ticket, chat and document here is invented for the LeakTrace demo; the vendor is fictional.",
+  "teams": [
+    {"id": "T-FAC", "name": "Cooling operations team"},
+    {"id": "T-ML", "name": "ML platform team"},
+    {"id": "T-DATA", "name": "Data engineering team"}
+  ],
+  "people": [
+    {"id": "P-01", "name": "Dana Reyes", "team": "T-FAC", "title": "Cooling technician"},
+    {"id": "P-02", "name": "Sam Okafor", "team": "T-FAC", "title": "Cooling operations lead"},
+    {"id": "P-03", "name": "Lee Marsh", "team": "T-FAC", "title": "Cooling technician"},
+    {"id": "P-04", "name": "Priya Nair", "team": "T-ML", "title": "ML platform on-call"},
+    {"id": "P-05", "name": "Jo Brandt", "team": "T-DATA", "title": "Data engineering on-call"},
+    {"id": "P-06", "name": "Alex Moreau", "team": "T-FAC", "title": "Duty manager"}
+  ],
+  "ownership": [
+    {"team": "T-FAC", "assets": ["CDU-1", "SEG-01", "V-01", "V-02", "V-03", "V-04", "V-05", "V-06", "V-07", "V-08", "V-09", "SEG-A1", "SEG-B1", "SEG-X1"]}
+  ],
+  "documents": [
+    {"id": "SOP-ISO-01", "kind": "sop", "title": "Isolating a leak on the cooling loop", "owner": "P-02", "reviewed_on": "2026-08-01",
+     "text": [
+       "Purpose. This procedure covers isolating a leak on a branch of the data hall cooling loop while keeping the racks that must stay running supplied with water.",
+       "Before you plan to move any valve, read its maintenance tickets and what we already know about it. Never plan around a valve with an open failed-to-operate ticket: treat that valve as stuck until a repair ticket closes it.",
+       "Row A. Closing V-01 and V-07 cuts off the Row A branch pipe SEG-A1. Rack A1 then depends on the backup link valve V-09 being opened, because Rack A1 must keep running.",
+       "If the backup link V-09 cannot be used, do not isolate Row A on your own. Call the duty manager and agree a plan with the ML platform team, who own the training job on Rack A1."
+     ]},
+    {"id": "SOP-XC-02", "kind": "sop", "title": "Opening the backup link valve V-09", "owner": "P-02", "reviewed_on": "2026-07-15",
+     "text": [
+       "V-09 joins the Row B side to Manifold A through the backup link pipe SEG-X1. It is normally closed.",
+       "To open it, check that Row B has spare flow, open V-09 slowly over one minute, then confirm that Rack A1 flow holds on meter FM-RA1.",
+       "The actuator on V-09 can seize after long periods closed. Exercise V-09 once a month, as listed in the maintenance schedule PM-LOOP."
+     ]},
+    {"id": "RB-ROWA", "kind": "runbook", "title": "Row A cooling runbook", "owner": "P-03", "reviewed_on": "2026-06-20",
+     "text": [
+       "Row A holds Rack A1 and Rack A2. Rack A1 runs the model training job and inference service and must keep running. Rack A2 runs the nightly batch and can be paused.",
+       "Leak sensors LS-A1 on the Row A branch pipe and LS-A3 on the Rack A2 feed. Pressure sensor PS-MA sits on Manifold A.",
+       "A small leak on the Rack A2 feed SEG-A3 can be stopped by closing V-04 alone; the nightly batch on Rack A2 is moved first."
+     ]},
+    {"id": "VN-KF200", "kind": "vendor_note", "title": "Kestrel Flow Controls KF-200 actuator service note (fictional vendor)", "owner": "P-02", "reviewed_on": "2026-05-02",
+     "text": [
+       "KF-200 actuators that stay closed for several weeks may fail to open on the first command: the motor hums but the stem does not turn.",
+       "Fix: replace the gearbox, then run three full open and close cycles before returning the valve to service."
+     ]},
+    {"id": "PM-LOOP", "kind": "schedule", "title": "Preventive maintenance schedule for the cooling loop", "owner": "P-01", "reviewed_on": "2026-09-01",
+     "text": [
+       "Monthly: exercise the backup link valve V-09 (open, then close). Owner: Dana Reyes.",
+       "Quarterly: exercise V-01 to V-08 and test the leak sensors LS-A1, LS-A3 and LS-B1.",
+       "Planned for next year: valve V-11 on the future Row C branch."
+     ]},
+    {"id": "ORG-ONCALL", "kind": "org_chart", "title": "On-call and ownership chart", "owner": "P-06", "reviewed_on": "2026-09-10",
+     "text": [
+       "The cooling operations team owns the cooling unit CDU-1, the pipes and every valve, including the backup link valve V-09. Lead: Sam Okafor. Duty manager: Alex Moreau.",
+       "The ML platform team owns the model training job and the inference service on Rack A1. On-call: Priya Nair.",
+       "The data engineering team owns the nightly batch and the dev sandbox. On-call: Jo Brandt."
+     ]}
+  ],
+  "tickets": [
+    {"id": "TCK-1001", "asset": "V-03", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-07-03", "closed_on": "2026-07-03", "performed_by": "P-01",
+     "title": "Quarterly exercise of the Rack A1 valve", "text": "V-03 opened and closed normally. No action needed."},
+    {"id": "TCK-1007", "asset": "LS-A3", "problem_code": "sensor_recalibrated", "status": "closed", "opened_on": "2026-07-09", "closed_on": "2026-07-10", "performed_by": "P-03",
+     "title": "Leak sensor on the Rack A2 feed drifting", "text": "LS-A3 read wet when dry. Recalibrated and tested with a damp cloth."},
+    {"id": "TCK-1013", "asset": "V-05", "problem_code": "repaired", "status": "closed", "opened_on": "2026-07-18", "closed_on": "2026-07-19", "performed_by": "P-03",
+     "title": "Rack B1 valve weeping at the packing", "text": "Packing on V-05 tightened and replaced. No more drips."},
+    {"id": "TCK-1019", "asset": "SEG-B1", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-07-25", "closed_on": "2026-07-25", "performed_by": "P-01",
+     "title": "Row B branch pipe inspection", "text": "SEG-B1 inspected along its length. No corrosion or drips."},
+    {"id": "TCK-1024", "asset": "PS-MA", "problem_code": "sensor_replaced", "status": "closed", "opened_on": "2026-08-04", "closed_on": "2026-08-05", "performed_by": "P-03",
+     "title": "Manifold A pressure sensor replaced", "text": "PS-MA failed its self-test and was replaced like for like."},
+    {"id": "TCK-1031", "asset": "V-02", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-08-12", "closed_on": "2026-08-12", "performed_by": "P-01",
+     "title": "Quarterly exercise of the Row B branch valve", "text": "V-02 opened and closed normally."},
+    {"id": "TCK-1036", "asset": "CDU-1", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-08-20", "closed_on": "2026-08-20", "performed_by": "P-02",
+     "title": "Cooling unit filter change", "text": "CDU-1 filters changed on schedule."},
+    {"id": "TCK-1042", "asset": "V-09", "problem_code": "valve_failed_to_operate", "status": "open", "opened_on": "2026-09-08", "closed_on": null, "performed_by": "P-01",
+     "title": "Backup link valve failed to open on its monthly exercise",
+     "text": "V-09 did not open from closed after six weeks idle. The actuator hums but the stem does not turn, as in vendor note VN-KF200. Gearbox ordered. Treat V-09 as stuck until it is repaired."},
+    {"id": "TCK-1048", "asset": "V-07", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-09-15", "closed_on": "2026-09-15", "performed_by": "P-01",
+     "title": "Quarterly exercise of the Manifold A inlet valve", "text": "V-07 opened and closed normally."},
+    {"id": "TCK-1053", "asset": "LS-A1", "problem_code": "routine_check", "status": "closed", "opened_on": "2026-09-22", "closed_on": "2026-09-22", "performed_by": "P-03",
+     "title": "Leak sensor test on the Row A branch pipe", "text": "LS-A1 alarmed within two seconds of a damp cloth and cleared when dry."}
+  ],
+  "messages": [
+    {"id": "MSG-01", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-09-08T07:10:00", "text": "Morning. Doing the monthly V-09 exercise now."},
+    {"id": "MSG-02", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-09-08T07:18:00", "text": "V-09 won't open. Motor hums, nothing moves. Logging TCK-1042."},
+    {"id": "MSG-03", "channel": "shift-chat", "author": "P-02", "sent_on": "2026-09-08T07:25:00", "text": "Thanks Dana. Same symptom as the KF-200 note. I'll order the gearbox."},
+    {"id": "MSG-04", "channel": "shift-chat", "author": "P-02", "sent_on": "2026-09-08T07:27:00", "text": "Until it's fixed, nobody plans on the backup link. Treat V-09 as stuck."},
+    {"id": "MSG-05", "channel": "shift-chat", "author": "P-06", "sent_on": "2026-09-08T08:02:00", "text": "Noted. If Row A leaks before the repair, call me before closing anything near Rack A1."},
+    {"id": "MSG-06", "channel": "shift-chat", "author": "P-04", "sent_on": "2026-09-08T08:15:00", "text": "ML platform here. Training job 7 on Rack A1 can't lose cooling. Page me first if it comes to that."},
+    {"id": "MSG-07", "channel": "shift-chat", "author": "P-03", "sent_on": "2026-09-09T06:40:00", "text": "LS-A3 is quiet after last month's recalibration."},
+    {"id": "MSG-08", "channel": "shift-chat", "author": "P-03", "sent_on": "2026-09-09T06:42:00", "text": "Who knows the backup link best? Dana did the last few exercises on V-09."},
+    {"id": "MSG-09", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-09-09T06:50:00", "text": "Yes, ask me about V-09. It has the KF-200 actuator, same as V-07."},
+    {"id": "MSG-10", "channel": "shift-chat", "author": "P-05", "sent_on": "2026-09-10T09:00:00", "text": "Data engineering: nightly batch 12 on Rack A2 can be paused any time, just tell us."},
+    {"id": "MSG-11", "channel": "shift-chat", "author": "P-02", "sent_on": "2026-09-12T10:30:00", "text": "Gearbox for V-09 is delayed by the supplier. Still stuck."},
+    {"id": "MSG-12", "channel": "shift-chat", "author": "P-03", "sent_on": "2026-09-15T07:05:00", "text": "V-07 exercise done, moves fine."},
+    {"id": "MSG-13", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-09-18T07:00:00", "text": "Reminder: the Row A runbook says close V-04 alone for a small leak on the Rack A2 feed."},
+    {"id": "MSG-14", "channel": "shift-chat", "author": "P-06", "sent_on": "2026-09-20T12:00:00", "text": "Ownership chart updated. Cooling ops owns every valve including V-09."},
+    {"id": "MSG-15", "channel": "shift-chat", "author": "P-03", "sent_on": "2026-09-22T07:30:00", "text": "LS-A1 tested, alarms in two seconds."},
+    {"id": "MSG-16", "channel": "shift-chat", "author": "P-02", "sent_on": "2026-09-25T09:10:00", "text": "Filters on CDU-1 are next due in November."},
+    {"id": "MSG-17", "channel": "shift-chat", "author": "P-04", "sent_on": "2026-09-26T11:20:00", "text": "Inference service 3 also lives on Rack A1. Same rule: page ML platform first."},
+    {"id": "MSG-18", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-09-29T07:15:00", "text": "Pressure on Manifold A steady all week."},
+    {"id": "MSG-19", "channel": "shift-chat", "author": "P-05", "sent_on": "2026-10-01T08:45:00", "text": "Dev sandbox 1 moved to Rack B2 for the week."},
+    {"id": "MSG-20", "channel": "shift-chat", "author": "P-02", "sent_on": "2026-10-02T16:00:00", "text": "Supplier says the V-09 gearbox ships next week."}
+  ]
+}

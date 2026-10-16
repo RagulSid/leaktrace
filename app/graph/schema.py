@@ -26,7 +26,7 @@ REL_TYPES = frozenset({
     "OF", "EVIDENCED_BY", "SUPERSEDES", "DERIVED_FROM", "IN", "WITH",
     "FOR", "CLAIMED_BY", "HANDED_OFF_TO", "BLOCKED_BY",
     "OWNS", "MAINTAINS", "MEMBER_OF", "EXPERT_IN", "PERFORMED", "MENTIONS", "DESCRIBES", "EXTRACTED_FROM",
-    "JUSTIFIED_BY", "ON", "OPERATES",
+    "JUSTIFIED_BY", "ON", "OPERATES", "AUTHORED",
 })
 
 # Labels looked up by id. All of them get a range index on `id`.

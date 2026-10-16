@@ -24,7 +24,7 @@ STEPS = {
     "inform": ["tell the owning team"],
     "people_decide": ["agree a plan with the team"],
 }
-FIELD_KINDS = ("inspect",)
+FIELD_KINDS = ("inspect", "find_out")
 VIEW_ROLES = perm.VIEWERS + perm.FIELD
 
 

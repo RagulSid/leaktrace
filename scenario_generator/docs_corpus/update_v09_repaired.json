@@ -1,0 +1,12 @@
+{
+  "source": "synthetic",
+  "note": "Practice data: the knowledge update. The repair ticket for V-09 replaces what we knew about it.",
+  "tickets": [
+    {"id": "TCK-1077", "asset": "V-09", "problem_code": "valve_repaired", "status": "closed", "opened_on": "2026-10-09", "closed_on": "2026-10-10", "performed_by": "P-01",
+     "title": "Backup link valve gearbox replaced",
+     "text": "Gearbox on V-09 replaced as in vendor note VN-KF200. Three full open and close cycles done. V-09 opens and closes normally and is back in service. Closes TCK-1042."}
+  ],
+  "messages": [
+    {"id": "MSG-21", "channel": "shift-chat", "author": "P-01", "sent_on": "2026-10-10T15:30:00", "text": "V-09 repaired and tested, three cycles. Backup link is usable again. TCK-1077."}
+  ]
+}

@@ -3,7 +3,8 @@ write the result and the next steps (HANDED_OFF_TO) back to the graph.
 
 Helpers keep nothing in memory between steps: everything they need is in the Task payload or the graph, so a
 helper process can be stopped and started at any time (a claimed step whose lease runs out goes back to open).
-Every tool call is recorded as an Episode (kind 'agent_step': role, tool, arguments, result, chooser).
+Every tool call is recorded as an Episode (kind 'agent_step': role, tool, arguments, result, and the chooser
+that actually picked that call: "rules" or the model name, with the reason when the rules stood in for the model).
 """
 
 import json
@@ -64,7 +65,8 @@ def run_task(tg: TenantGraph, chooser, claimed: dict) -> StepOutcome:
             except GraphUnavailable:
                 raise
         episodic.record(tg, incident=ctx.incident, actor=role.name, kind="agent_step", tool=call.name,
-                        args={**call.args, "chooser": chooser.name, "task": ctx.task}, summary=_short(result),
+                        args={**call.args, "chooser": call.chooser, "fallback": call.fallback, "task": ctx.task},
+                        summary=_short(result),
                         ms=(time.perf_counter() - t0) * 1000, ok="refused" not in result)
         history.append(Step(call, result))
         if ctx.finish:

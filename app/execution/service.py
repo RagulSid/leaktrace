@@ -200,6 +200,7 @@ def _break_glass(tg: TenantGraph, now: float) -> list[dict]:
                                   "reason": ", ".join(verdict["failed"]) or "executed without approval",
                                   "detail": json.dumps(verdict, sort_keys=True, default=str)})
         notify.send(tg, c["incident"], to=["operator", "manager"],
+                    code="break_glass_executed" if verdict["execute"] else "break_glass_refused",
                     message=(f"Emergency action taken on {did}: needs review" if verdict["execute"]
                              else f"Emergency action refused on {did}: people must decide now"))
         out.append({"decision": did, **verdict})

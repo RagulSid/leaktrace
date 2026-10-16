@@ -5,7 +5,8 @@ from pathlib import Path
 
 from tests.conftest import ROOT
 
-FORBIDDEN = {"scenario_generator", "networkx", "igraph", "rustworkx", "graph_tool"}
+# no second graph library, and no vendor LLM SDK: models are reached only through app/agents/llm_client.py
+FORBIDDEN = {"scenario_generator", "networkx", "igraph", "rustworkx", "graph_tool", "anthropic", "openai"}
 
 
 def _imports(path: Path) -> set[str]:

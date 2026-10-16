@@ -1,0 +1,1805 @@
+{
+ "ran_at": "2026-10-16T07:25:54Z",
+ "seconds": 24.0,
+ "environment": "Windows 11, Python 3.12.8, FalkorDB at 127.0.0.1:6380",
+ "seeds": 5,
+ "cases": {
+  "S1": "leak on the Row A branch pipe",
+  "S5": "small leak on the Rack A2 feed",
+  "S3": "S1 with the backup link valve V-09 known stuck and really stuck"
+ },
+ "approaches": {
+  "graph": "LeakTrace (multi-hop searches, max flow per plan, memory, authority)",
+  "flat": "flat tables: one lookup per table, no paths, no max flow",
+  "B1": "close the nearest valve upstream",
+  "B2": "isolate the whole loop"
+ },
+ "not_run": [
+  "B3: a language model with flat tables (no model key was set)"
+ ],
+ "scored_by": "scenario_generator/plant.py (simulated plant, practice data); a plan that needs a person's OK is scored as if approved",
+ "summary": [
+  {
+   "case": "S1",
+   "approach": "graph",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 0,
+   "racks_short_avg": 2.0,
+   "weighted_shortfall_avg": 1.667,
+   "moves_avg": 3.0,
+   "asked_person": 5,
+   "lookups_avg": 141.0,
+   "max_flow_calls_avg": 49.0,
+   "errors": 0
+  },
+  {
+   "case": "S1",
+   "approach": "flat",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 2.0,
+   "weighted_shortfall_avg": 7.0,
+   "moves_avg": 2.0,
+   "asked_person": 0,
+   "lookups_avg": 5.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S1",
+   "approach": "B1",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 2.0,
+   "weighted_shortfall_avg": 7.0,
+   "moves_avg": 1.0,
+   "asked_person": 0,
+   "lookups_avg": 2.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S1",
+   "approach": "B2",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 4.0,
+   "weighted_shortfall_avg": 13.0,
+   "moves_avg": 8.0,
+   "asked_person": 0,
+   "lookups_avg": 1.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S5",
+   "approach": "graph",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 0,
+   "racks_short_avg": 1.0,
+   "weighted_shortfall_avg": 2.0,
+   "moves_avg": 1.0,
+   "asked_person": 0,
+   "lookups_avg": 118.0,
+   "max_flow_calls_avg": 21.0,
+   "errors": 0
+  },
+  {
+   "case": "S5",
+   "approach": "flat",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 0,
+   "racks_short_avg": 1.0,
+   "weighted_shortfall_avg": 2.0,
+   "moves_avg": 1.0,
+   "asked_person": 0,
+   "lookups_avg": 5.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S5",
+   "approach": "B1",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 0,
+   "racks_short_avg": 1.0,
+   "weighted_shortfall_avg": 2.0,
+   "moves_avg": 1.0,
+   "asked_person": 0,
+   "lookups_avg": 2.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S5",
+   "approach": "B2",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 4.0,
+   "weighted_shortfall_avg": 13.0,
+   "moves_avg": 8.0,
+   "asked_person": 0,
+   "lookups_avg": 1.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S3",
+   "approach": "graph",
+   "runs": 5,
+   "leak_stopped": 0,
+   "key_rack_short_runs": 0,
+   "racks_short_avg": 0.2,
+   "weighted_shortfall_avg": 0.017,
+   "moves_avg": 0.0,
+   "asked_person": 5,
+   "lookups_avg": 136.0,
+   "max_flow_calls_avg": 49.0,
+   "errors": 0
+  },
+  {
+   "case": "S3",
+   "approach": "flat",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 2.0,
+   "weighted_shortfall_avg": 7.0,
+   "moves_avg": 2.0,
+   "asked_person": 0,
+   "lookups_avg": 5.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S3",
+   "approach": "B1",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 2.0,
+   "weighted_shortfall_avg": 7.0,
+   "moves_avg": 1.0,
+   "asked_person": 0,
+   "lookups_avg": 2.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  },
+  {
+   "case": "S3",
+   "approach": "B2",
+   "runs": 5,
+   "leak_stopped": 5,
+   "key_rack_short_runs": 5,
+   "racks_short_avg": 4.0,
+   "weighted_shortfall_avg": 13.0,
+   "moves_avg": 8.0,
+   "asked_person": 0,
+   "lookups_avg": 1.0,
+   "max_flow_calls_avg": 0.0,
+   "errors": 0
+  }
+ ],
+ "runs": [
+  {
+   "case": "S1",
+   "seed": 1,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "act",
+   "level": "L3",
+   "lookups": 141,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 447.6,
+   "moves_list": [
+    "close V-01",
+    "close V-07",
+    "open V-09"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 1.667,
+   "moves": 3,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 1,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 1,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 1,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 2,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "act",
+   "level": "L3",
+   "lookups": 141,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 543.7,
+   "moves_list": [
+    "close V-01",
+    "close V-07",
+    "open V-09"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 1.667,
+   "moves": 3,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 2,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 2,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 2,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 3,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "act",
+   "level": "L3",
+   "lookups": 141,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 479.9,
+   "moves_list": [
+    "close V-01",
+    "close V-07",
+    "open V-09"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 1.667,
+   "moves": 3,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 3,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 3,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 3,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 4,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "act",
+   "level": "L3",
+   "lookups": 141,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 502.7,
+   "moves_list": [
+    "close V-01",
+    "close V-07",
+    "open V-09"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 1.667,
+   "moves": 3,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 4,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 4,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 4,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 5,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "act",
+   "level": "L3",
+   "lookups": 141,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 435.6,
+   "moves_list": [
+    "close V-01",
+    "close V-07",
+    "open V-09"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 1.667,
+   "moves": 3,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 5,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 5,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S1",
+   "seed": 5,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 1,
+   "approach": "graph",
+   "asked_person": false,
+   "decision": "act",
+   "level": "L2",
+   "lookups": 118,
+   "max_flow_calls": 21,
+   "errors": 0,
+   "ms": 340.0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 1,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 1,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 1,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 2,
+   "approach": "graph",
+   "asked_person": false,
+   "decision": "act",
+   "level": "L2",
+   "lookups": 118,
+   "max_flow_calls": 21,
+   "errors": 0,
+   "ms": 336.3,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 2,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 2,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 2,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 3,
+   "approach": "graph",
+   "asked_person": false,
+   "decision": "act",
+   "level": "L2",
+   "lookups": 118,
+   "max_flow_calls": 21,
+   "errors": 0,
+   "ms": 243.9,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 3,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 3,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 3,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 4,
+   "approach": "graph",
+   "asked_person": false,
+   "decision": "act",
+   "level": "L2",
+   "lookups": 118,
+   "max_flow_calls": 21,
+   "errors": 0,
+   "ms": 295.2,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 4,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 4,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 4,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 5,
+   "approach": "graph",
+   "asked_person": false,
+   "decision": "act",
+   "level": "L2",
+   "lookups": 118,
+   "max_flow_calls": 21,
+   "errors": 0,
+   "ms": 353.7,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 5,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 5,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-04"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 2.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S5",
+   "seed": 5,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 1,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "escalate",
+   "level": "L3",
+   "lookups": 136,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 319.9,
+   "moves_list": [],
+   "leak_stopped": false,
+   "leak_flow_left": 9.07,
+   "key_racks_short": [],
+   "racks_short": [],
+   "weighted_shortfall": 0,
+   "moves": 0,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 1,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 1,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 1,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 2,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "escalate",
+   "level": "L3",
+   "lookups": 136,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 452.5,
+   "moves_list": [],
+   "leak_stopped": false,
+   "leak_flow_left": 15.65,
+   "key_racks_short": [],
+   "racks_short": [
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 0.087,
+   "moves": 0,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 2,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 2,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 2,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 3,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "escalate",
+   "level": "L3",
+   "lookups": 136,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 419.8,
+   "moves_list": [],
+   "leak_stopped": false,
+   "leak_flow_left": 9.9,
+   "key_racks_short": [],
+   "racks_short": [],
+   "weighted_shortfall": 0,
+   "moves": 0,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 3,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 3,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 3,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 4,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "escalate",
+   "level": "L3",
+   "lookups": 136,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 367.5,
+   "moves_list": [],
+   "leak_stopped": false,
+   "leak_flow_left": 9.89,
+   "key_racks_short": [],
+   "racks_short": [],
+   "weighted_shortfall": 0,
+   "moves": 0,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 4,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 4,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 4,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 5,
+   "approach": "graph",
+   "asked_person": true,
+   "decision": "escalate",
+   "level": "L3",
+   "lookups": 136,
+   "max_flow_calls": 49,
+   "errors": 0,
+   "ms": 434.8,
+   "moves_list": [],
+   "leak_stopped": false,
+   "leak_flow_left": 12.98,
+   "key_racks_short": [],
+   "racks_short": [],
+   "weighted_shortfall": 0,
+   "moves": 0,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 5,
+   "approach": "flat",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 5,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-07"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 2,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 5,
+   "approach": "B1",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 2,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2"
+   ],
+   "weighted_shortfall": 7.0,
+   "moves": 1,
+   "moves_failed": []
+  },
+  {
+   "case": "S3",
+   "seed": 5,
+   "approach": "B2",
+   "asked_person": false,
+   "decision": "act",
+   "lookups": 1,
+   "max_flow_calls": 0,
+   "errors": 0,
+   "moves_list": [
+    "close V-01",
+    "close V-02",
+    "close V-03",
+    "close V-04",
+    "close V-05",
+    "close V-06",
+    "close V-07",
+    "close V-08"
+   ],
+   "leak_stopped": true,
+   "leak_flow_left": 0.0,
+   "key_racks_short": [
+    "RACK-A1",
+    "RACK-B1"
+   ],
+   "racks_short": [
+    "RACK-A1",
+    "RACK-A2",
+    "RACK-B1",
+    "RACK-B2"
+   ],
+   "weighted_shortfall": 13.0,
+   "moves": 8,
+   "moves_failed": []
+  }
+ ]
+}

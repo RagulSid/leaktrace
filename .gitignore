@@ -1,0 +1,28 @@
+# Planning and working docs: never pushed. The human decides what is published.
+/repo-docs/
+/CLAUDE.md
+/.claude/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Local data and noise
+falkordb-data/
+*.log
+.DS_Store
+repo-docs/
+/docs/

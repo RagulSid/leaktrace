@@ -50,7 +50,7 @@ def test_execution_status_over_mcp_is_read_only():
         r = run_execution("s1", "happy", tenant, 2, reset=True)
         tools, result = asyncio.run(_call(tenant, "execution_status", {"decision_id": r["decision"]}))
         names = {t.name for t in tools.tools}
-        assert names == {"find_suspects", "trace_impact", "execution_status"}  # nothing that approves or moves valves
+        assert names == {"find_suspects", "trace_impact", "execution_status", "ask_leaktrace"}  # nothing that approves or moves valves
         data = result.structured_content or json.loads(result.content[0].text)
         assert data["found"] and data["status"] == "verified" and data["actions"] == 3
         assert [(s["seq"], s["valve"], s["status"]) for s in data["steps"]] == [

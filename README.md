@@ -20,6 +20,41 @@ LeakTrace helps operators deal with leaks in water and coolant networks. Reports
 
 Built for Graph Hacks 2026, Track 1: Agents That Act on Connected Data.
 
+## Run locally
+
+From a fresh terminal (Windows PowerShell), in the project folder. FalkorDB listens on **localhost:6380**.
+
+```powershell
+docker compose up -d                                   # 1. start FalkorDB (port 6380; its browser UI is on http://localhost:3000)
+.\.venv\Scripts\Activate.ps1                          # 2. activate the Python environment (every new terminal)
+python -m scenario_generator.demo --tenant demo        # 3. seed the demo customer with practice problems (resets it)
+cd web; npm install; npm run build; cd ..              # 4. build the web app (again only after web/ changes)
+python -m uvicorn app.api.main:app --port 8000         # 5. start the server, then open http://localhost:8000/
+```
+
+Sign in with `operator1` (open problems, approve plans), `manager1` (auto mode settings), `tech1` (field crew jobs), `staff1`, `operator2` or `safety1`. The password for all of them is the value of `LEAKTRACE_DEMO_PASSWORD` in your `.env`. "Report a problem", "Track my report" and "How it works" need no sign-in.
+
+**First time only**, before step 1:
+
+```powershell
+py -3.12 -m venv .venv                                 # Python 3.11+ works
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env                                 # then set LEAKTRACE_DEMO_PASSWORD (and LEAKTRACE_SECRET) in .env
+```
+
+`LEAKTRACE_SECRET` signs the login tokens. Without it a new secret is made each time the server starts, and everyone has to sign in again after a restart.
+
+On macOS or Linux, activate with `source .venv/bin/activate`. Everything else is the same. In Git Bash on Windows, use `source .venv/Scripts/activate`.
+
+Two common errors:
+- `No module named 'falkordb'`: the environment is not active, so step 2 was skipped. Run step 2, or call `.venv\Scripts\python -m ...` directly.
+- `Missing argument 'APP'`: uvicorn needs the app path, `app.api.main:app`, as in step 5.
+
+### Troubleshooting
+
+- "Can't reach the map right now": open `http://localhost:8000/health`. `falkordb_reachable: false` means FalkorDB is not running: `docker compose up -d` (and `docker logs leaktrace-falkordb` says why it stopped). `demo_seeded: false` means the demo customer's map is empty: run step 3 again. The server log and the screen's Details drawer name the host, port and graph.
+
 ## Setup (local)
 
 Requirements: Docker, Python 3.11+.
@@ -62,6 +97,8 @@ Or run the API server and drive it over HTTP:
 .venv/Scripts/python -m uvicorn app.api.main:app --port 8000
 .venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --base-url http://localhost:8000 --import-pack
 ```
+
+To start fresh in one container, `deploy/start.sh` does the following. It runs FalkorDB on localhost only, in memory. It seeds the demo customer if the graph is empty (`python -m app.cli ensure-demo`; this needs `LEAKTRACE_DEMO_PASSWORD`). It keeps the helpers running (`python -m app.agents.worker --loop 5`) and serves the API. `deploy/Dockerfile` is a draft single image built on the same pinned FalkorDB image. Nothing is deployed yet.
 
 The agent tool server (MCP, stdio) for one customer: `LEAKTRACE_TENANT=demo python -m app.mcp_server.server`.
 
@@ -159,7 +196,7 @@ A new problem gets an Intake step, which is a `Task` node in the graph. Six help
 
 **Who chooses the tools.** A chooser picks each helper's next tool.
 
-- With a language model (`LEAKTRACE_AGENT_CHOOSER=llm` and an Anthropic API key), the model sees the helper's plain instructions, its tools and every earlier result, and must call exactly one tool per turn.
+- With a language model, the model sees the helper's plain instructions, its tools and every earlier result, and calls one tool per turn. Any OpenAI-compatible chat API works. Set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` in `.env`; the code uses no vendor SDK. If the model times out, hits a rate limit (HTTP 429), returns something unusable, or the run reaches its call cap (60 by default), the rule list takes over. Every step records which one actually chose it (`rules` or the model's name), and why the rules stood in.
 - Without one, a fixed rule list per helper picks the tools. This is what all the tests and every number here use, and each step in the graph is labelled with the chooser that took it.
 
 **Authority stays in code, whatever the chooser picks:**
@@ -200,7 +237,80 @@ It still goes through the stale-plan guard, and it always leaves a review item a
 - moving or warning about jobs on racks that lose flow, for the owning team
 - agreeing a plan with people, when no plan passes
 
-The crew confirms each step and can report a valve that would not move; that becomes a fact for future plans. The Record keeper writes an incident report from the facts in the graph. The prose comes from a fixed template unless a language model is configured, and the report says which.
+The crew confirms each step and can report a valve that would not move; that becomes a fact for future plans. The Record keeper writes an incident report from the facts in the graph. The prose comes from a fixed template unless a language model is configured and answers. The report names which one wrote it.
+
+## The web app
+
+Six screens, in plain words, in a white hairline style. Every word is in `web/src/copy.ts` and every colour in `web/src/theme.css`. The API returns codes, and the screens turn them into words. "Practice mode" shows on every screen.
+
+| Screen | Who | What it shows |
+|---|---|---|
+| Report a problem, Track my report | anyone, no sign-in | A short form, then a code and five plain stages ("Received" to "Fixed and checked"), plus "I see this too". No internal ids leave the server |
+| Open problems | operator, manager, safety officer | Queue with word badges. How sure we are. The map with the "why we think so" path, what's affected and the valves the plan moves. Every plan tested, with Pass or Fail per check. The recommended plan, the reasons it needs approval, Approve and run, Don't approve, the valve steps, the check result and undo |
+| My jobs | field crew | Valve steps to pick up, mark done, or report "it won't move" (that becomes something we know for later plans). Field jobs with step-by-step confirmation |
+| Auto mode | manager (others read only) | What helpers may do on their own (bounded, every change audited), pause switch, what helpers did on their own, things to review (including names in documents that match nothing on the map), what we've learned (a record replaced by a newer one is marked, and cannot be confirmed back), proven fixes |
+| Who did what | operator, manager | The hand-off chain read from the graph, and each helper step in plain words. Every step says whether the fixed rules or a model chose it, exactly as recorded. Ask LeakTrace beside it: questions answered from the map with their sources, or "I don't know" with an offer to send the field crew to find out. The conversation is saved per person and problem |
+| How it works | anyone | Live counts from FalkorDB and the shape of the map. Six steps of one real problem, each with its saved read-only search, parameters, plan and cost, and a button that runs it on the live map. Feature call counts, the slowest searches, and the checks the test run saved. With FalkorDB stopped it shows an error and no numbers |
+
+```bash
+cd web && npm install && npm run build      # the API then serves the app at http://localhost:8000/
+npm run dev                                 # or: development server on :5173, forwarding API calls to :8000
+python -m scenario_generator.demo --tenant demo   # practice problems for the screens (needs LEAKTRACE_DEMO_PASSWORD)
+```
+
+## Ask LeakTrace (answers with sources)
+
+The company's documents, maintenance tickets and shift chats live in the same graph as the map, so an answer can follow links from a valve to the ticket about it, the thing we know because of that ticket, the decision that avoided the valve, and the procedure that names it.
+
+**Reading them in** (`POST /brain/ingest`, managers; `app/brain/ingest.py`). No language model is involved:
+- each text is resolved against the map by exact id (`V-09`, `TCK-1042`) or exact name ("Backup link valve") into `MENTIONS` links
+- a word that looks like a map id but matches nothing (for example `V-11`) becomes a review item for a manager instead of entering the map
+- each paragraph, ticket and message becomes a `Chunk` with a passage vector in FalkorDB's vector index. The vectors are hashed word counts computed locally (no model, no network), so meaning search finds passages that share the question's words, not passages that say the same thing differently
+- the Record keeper's rule for tickets: a "failed to operate" ticket becomes an active `stuck` fact about the valve, evidenced by the ticket, so every later plan that moves that valve fails its "can be done" check; a repair ticket adds a `working` fact that `SUPERSEDES` the stuck one (kept, never deleted)
+- who knows what (`EXPERT_IN {score, basis, last}`) is recomputed from the tickets each person did
+
+**Answering** (`POST /brain/ask`; `app/brain/ask.py`):
+1. find the ids and names in the question
+2. pick a saved search by the question's words: why a valve was avoided (decision record, failed check, fact, ticket, procedure), who owns it (`OWNS`, also through the jobs on a rack), who knows it (`EXPERT_IN`), what we know about it (facts with what replaced what, tickets, documents), otherwise passages from the vector index that share at least two words with the question
+3. word the answer with fixed sentences, each claim followed by its `[id]`. If a model is set up (`LLM_*`), it may reword them, keeping the ids
+4. check every citation in code: each `[id]` must exist on this customer's map and be among the search results, and there must be at least one. Otherwise the answer is "I don't know", with an offer to send the field crew a "find out" job
+
+Every question and answer is saved as `Message` nodes in a `Conversation` per person and problem, so the conversation resumes after a restart.
+
+**Practice corpus** (`scenario_generator/docs_corpus/`, all invented): 6 documents (2 procedures, a runbook, a vendor note for a fictional vendor, a maintenance schedule, an ownership chart), 10 tickets, 20 shift-chat messages, 6 people in 3 teams, and one update (repair ticket `TCK-1077`).
+
+```bash
+python -m scenario_generator.knowledge --tenant s9demo --reset   # corpus, an S1 leak, questions, then the update
+```
+
+What it gives on this map (also checked by `tests/test_ask_leaktrace.py`): "Why did we avoid valve V-09?" answers that V-09 does not move, citing the thing we know `F-TCK-1042`, the ticket `TCK-1042`, the decision that handed the choice to people, and the procedures `SOP-ISO-01` and `SOP-XC-02`. After the repair ticket, "What do we know about V-09?" says the earlier record no longer holds and cites `TCK-1077`, and planning the same problem again picks the rescue plan through V-09 (it needs a person's OK). "What is the capital of France?" gets "I don't know".
+
+## Graph vs flat tables (measured)
+
+`python -m scenario_generator.evaluate --seeds 5` decides the same cases four ways and scores every plan with the same simulated plant (`scenario_generator/plant.py`, which knows nothing about the app):
+- **graph**: LeakTrace itself, through its API (multi-hop searches, max flow per plan, memory, authority). A plan that needs a person's OK is scored as if approved
+- **flat**: the graph tools replaced by flat tables: one lookup per table, no paths, no max flow. It closes the valves next to the suspected section, counts as affected only racks fed directly by it, and reads the ticket table for the valves it closes
+- **B1**: close the nearest valve upstream. **B2**: isolate the whole loop
+- not run: a language model with flat tables (no model key was set)
+
+Cases: S1 (leak on the Row A branch pipe), S5 (small leak on the Rack A2 feed), S3 (S1 with the backup link valve V-09 known stuck from a ticket and really stuck in the plant). Key racks are criticality 5 (Rack A1, Rack B1). Run 2026-10-16T07:25:54Z, 5 seeds per case, 24.0 s, Windows 11, Python 3.12.8, FalkorDB at 127.0.0.1:6380:
+
+| Case | Approach | Leak stopped | Runs with a key rack short | Racks short (avg) | Valve moves (avg) | Asked a person | Searches or lookups (avg) | Max flow runs (avg) |
+|---|---|---|---|---|---|---|---|---|
+| S1 | graph | 5 of 5 | 0 of 5 | 2.0 | 3.0 | 5 of 5 | 141.0 | 49.0 |
+| S1 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5.0 | 0.0 |
+| S1 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
+| S1 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
+| S5 | graph | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 118.0 | 21.0 |
+| S5 | flat | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 5.0 | 0.0 |
+| S5 | B1 | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
+| S5 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
+| S3 | graph | 0 of 5 | 0 of 5 | 0.2 | 0.0 | 5 of 5 | 136.0 | 49.0 |
+| S3 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5.0 | 0.0 |
+| S3 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
+| S3 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
+
+What this shows, and no more: on S1 the graph plan stops the leak and keeps both key racks supplied by opening the backup link, while the flat and nearest-valve plans leave Rack A1 without water in every run (they cannot see two hops downstream). On S5 there is no difference between graph, flat and B1: all close V-04. On S3 the graph plan does not stop the leak on its own: with V-09 stuck no plan passes every check, so it hands the choice to people and moves nothing; the others stop the leak and leave Rack A1 without water. The graph uses far more searches (118 to 141 per decision on average, including 21 to 49 max-flow runs). The same numbers are on the How it works page, read from `app/data/evaluation.json`.
 
 ## Graph data model (current)
 
@@ -214,6 +324,7 @@ One graph per customer, named `lt_<tenant>`. Login checks the account in that cu
 | `AuthorityPolicy` | What helpers may do on their own: `min_confidence`, `max_auto_criticality`, `max_auto_operations`, `rate_limit_per_zone_per_hour`, `critical_min_criticality`, `frozen`, ... |
 | `Report`, `Incident`, `Option`, `Decision`, `Task`, `Episode`, `Fact` | Reports, problems, plans with their checks, committed decisions (`status`, `requested_by`, graph `fingerprint`), work steps (evidence checks and valve moves with lease and idempotency key), a record of every tool call, learned facts (for example a valve reported stuck) |
 | `Approval`, `Execution`, `Action`, `Verification`, `AuditEvent` | Who approved and until when; one run of a plan with the exact prior valve states; each valve change made; the check against fresh readings; one record per state change |
+| `Person`, `Document` (procedures also `SOP`), `Ticket`, `Chunk`, `Conversation`, `Message` | Company knowledge: people and their teams, documents, maintenance tickets, passages with their vectors, shift chats and each person's conversations with Ask LeakTrace |
 | `Agent`, `WorkOrder`, `Playbook`, `Review`, `IncidentReport` | A helper (role, chooser, last process); a job for people with its steps and confirmations; a plan that worked before on a section, with success and failure counts; an item a manager must review; the incident report (facts and prose) |
 
 Every network node also has the label `Entity`, with an index on `id`.
@@ -228,6 +339,7 @@ Every network node also has the label `Entity`, with an index on `id`.
 | `HAS_OPTION`, `DECIDED`, `CHOSE {role}`, `OPERATES`, `JUSTIFIED_BY` | A problem's plans and decision; the chosen and fallback plans; valves a plan moves; the evidence behind a decision |
 | `FOR`, `OF`, `SUPERSEDES` | A work step for a problem; an episode of a problem or an audit record of a decision; fact history, and a newer decision replacing an older one |
 | `HANDED_OFF_TO`, `CLAIMED_BY`, `ON`, `DERIVED_FROM` | One helper step passing work to the next; which helper took a step; what a job is about; a job or playbook coming from a decision |
+| `MEMBER_OF`, `OWNS`, `PERFORMED`, `EXPERT_IN {score, basis, last}`, `MENTIONS`, `AUTHORED`, `IN`, `WITH` | A person's team; a team owns assets and a person owns documents; who did a ticket; who knows an asset (from tickets); a text names a thing on the map; who wrote a chat message; a message in its conversation; a conversation with a person |
 | `APPROVES`, `IMPLEMENTS`, `PART_OF`, `AUTHORIZED_BY`, `VERIFIES`, `EVIDENCED_BY` | Approval of a decision; an execution and its actions carry out a decision; valve-move steps and actions belong to an execution; an action is allowed by an approval or by the auto-mode policy; a check of a decision; a fact and the field report it came from |
 
 ## Key queries and algorithms
@@ -241,6 +353,10 @@ All query text lives in [`app/graph/queries/`](app/graph/queries/). Each query i
 | `q2_trace_impact`, `evidence_path` | Racks downstream through open links, their jobs and owning teams, and the map path to each (multi-hop) | What is affected, who to tell, the path shown on the map |
 | `q3_exposure` | Racks in the same or an adjacent zone, with their power feeds | Whether live equipment is at risk |
 | `q4_recall_incidents` | Earlier problems on the same assets, their decisions, and active facts | Whether past experience changes the plan |
+| `brain_decisions_mentioning`, `brain_facts`, `brain_docs_mentioning` | Decisions whose plans name a valve, the facts their failed checks cite (with evidence and what replaced what), and procedures naming it | Ask LeakTrace: why a valve was avoided, with sources |
+| `brain_owners`, `brain_experts` | Teams owning an asset (directly or through the jobs on a rack); people with `EXPERT_IN` from their tickets | Who to call |
+| `brain_passages` | `db.idx.vector.queryNodes` over passages, with the document, ticket or message each belongs to | Passages for a question no direct link answers |
+| `brain_fact_supersede` | A newer fact replaces older ones (status, `valid_to`, `SUPERSEDES`) | A repaired valve can be planned on again |
 | `boundary_valves` | The first valves met walking out from a section in either direction | Which valves can cut the section off |
 | `max_flow` (`algo.maxFlow`) | Maximum flow from the cooling unit to one target, under a plan's temporary capacities | Whether the leak gets 0; whether each critical rack (alone, then together) still gets its required flow; how much the others lose |
 | `asset_flags` | Locked or irreversible valves, and active "stuck" facts | Whether a plan is feasible at all |
@@ -301,6 +417,10 @@ Otherwise the decision needs approval, and lists the conditions that failed.
 
 `POST /auth/login` · `POST /assets/import` (manager) · `POST /reports` · `GET /reports/{code}` · `POST /readings` (meters account, field crew) · `GET /incidents` · `GET /incidents/{id}` · `POST /incidents/{id}/investigate` (operator, manager) · `GET /decisions/{id}` · `GET /agents/timeline?incident=`
 
+Ask LeakTrace: `POST /brain/ask` · `GET /brain/conversation?incident=` · `POST /brain/find-out` (operator, manager) · `POST /brain/ingest` (manager)
+
+Health: `GET /health` gives `falkordb_reachable` and `demo_seeded` (yes/no only; 503 unless both)
+
 Problems, helpers, jobs and reports: `POST /incidents/{id}/close` (operator, manager) · `GET /incidents/{id}/helpers` · `GET|POST /incidents/{id}/report` · `GET /work-orders` · `POST /work-orders/{id}/take|confirm|complete` (field crew) · `GET /reviews`
 
 Carrying out a decision: `POST /decisions/{id}/approve` · `/reject` · `/execute` · `/verify` · `/rollback` · `/replan` (operator, manager) · `GET /decisions/{id}/status` · `GET /decisions/{id}/audit` · `POST /tasks/claim` · `POST /tasks/{id}/result` (field crew)
@@ -313,13 +433,13 @@ The same steps from the command line, acting as a named user of one customer (th
 # also: reject, execute, verify, rollback, replan, audit
 ```
 
-The agent tool server adds one read-only tool, `execution_status`. No tool can approve, execute or undo anything.
+The agent tool server adds two read-only tools, `execution_status` and `ask_leaktrace`. No tool can approve, execute or undo anything.
 
-With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is cached.
+With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is cached. The body says why (`reason`: `not_reachable` or `graph_empty`) with the host, port and graph name, and the server log says the same with the fix; the screens show plain words and keep these in a Details drawer.
 
 ## Tests
 
-`pytest -q` runs 204 tests against the live FalkorDB (about 2.5 minutes). They cover:
+`pytest -q` runs the tests against the live FalkorDB. They cover:
 
 - the docs max-flow example (13)
 - the what-if checks
@@ -343,7 +463,13 @@ With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is c
 - closing problems, a new alarm opening a new problem, the escalation after an automatic undo
 - the emergency path (acts after the wait; refuses when paused, unsure, starving a critical rack or stale) and earned autonomy (never above the manager's ceiling; the policy is unchanged by the helpers)
 - jobs with field confirmation, and the incident report
-- the language-model chooser's messages, with a fake client (no model is called in tests)
+- the language-model chooser against a fake OpenAI-compatible server: fallback on timeout, rate limit and bad output, the call cap, and honest labels (no model is called in tests)
+- the screens' routes (public tracking shows no internal ids; settings are manager-only, bounded and audited)
+- lints: plain words in `copy.ts`, no words hard-coded in screens, colours only in `theme.css`, no font weight above 600, one primary button per screen, no other track named in public text
+- How it works honesty: numbers equal live counts and change with the data, the query text shown is the text that runs, every run is read-only (a write through that path is rejected), demo customer only, and an error with no numbers when FalkorDB is down
+- `/health` and the failure reasons: not reachable versus graph empty (missing, or wiped after sign-in), in the body and the log; an unknown customer still looks like a wrong password
+- Ask LeakTrace: the corpus read in (twice changes nothing), the V-09 question citing a ticket, a thing we know and a procedure, who owns and who knows, "I don't know" with the find-out job, citations checked in code against a stand-in model that adds or drops ids, another customer getting no answer, the knowledge update changing later answers and the next plan, a replaced record that cannot be confirmed back, conversations saved per person and problem and read back by a new process
+- the comparison with flat tables and the baselines (one seed) and How it works reading the saved result
 
 `LEAKTRACE_KILLSWITCH_DOCKER=1 pytest tests/test_kill_switch.py` also stops the real container twice:
 

@@ -1,0 +1,46 @@
+{
+  "checks": {
+    "claim_race": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_vector_and_claim.py::test_claim_race_exactly_one_winner_per_task",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "how_it_works_honest": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_how_it_works.py::test_numbers_are_live_and_change_with_the_data",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "kill_switch": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_kill_switch.py::test_api_fails_loudly_without_falkordb",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "read_only_rejects_writes": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_graph_foundation.py::test_ro_query_rejects_writes",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "restart_recall": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_restart_recall.py::test_stuck_valve_is_recalled_after_restart_and_changes_the_plan",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "tenant_isolation": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_auth_tenancy.py::test_token_for_a_cannot_see_b",
+      "when": "2026-10-16 08:21 UTC"
+    },
+    "undo_works": {
+      "environment": "Windows 11, Python 3.12.8, FalkorDB image pinned in docker-compose.yml",
+      "result": "pass",
+      "test": "tests/test_execution_scenarios.py::test_v07_stuck_mid_plan_undo_restores_the_exact_prior_state",
+      "when": "2026-10-16 08:21 UTC"
+    }
+  }
+}

@@ -1,0 +1,1 @@
+playwright==1.64.0  # screenshots of the web app (tools/screenshots.py); uses the installed Edge, no browser download

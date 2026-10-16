@@ -560,7 +560,7 @@ def update_playbook(ctx: AgentCtx) -> dict:
 
 
 def write_incident_report(ctx: AgentCtx) -> dict:
-    writer = getattr(ctx.chooser, "prose_writer", None)
+    writer = getattr(ctx.chooser, "prose_writer", None)  # returns (text, model name) or None for the template
     r = incident_report.write(ctx.tg, ctx.incident, "record_keeper", writer=writer)
     ctx.case["report"] = r["id"]
     return {"report": r["id"], "prose_by": r["prose_by"], "prose": r["prose"][:600]}

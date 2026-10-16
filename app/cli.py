@@ -3,6 +3,8 @@
   python -m app.cli seed --tenant demo --pack packs/datacenter/topology.json [--reset]
   python -m app.cli stats --tenant demo
   python -m app.cli bootstrap --tenant demo [--reset]        create schema and the demo users
+  python -m app.cli ensure-demo --tenant demo --pack packs/datacenter/topology.json
+                                  create and seed the demo customer only if its graph is empty (startup)
   python -m app.cli add-user --tenant demo --user op1 --role operator --password ...
   python -m app.cli investigate --tenant demo --incident INC-XXXXXX [--as operator1]
 
@@ -61,6 +63,25 @@ def bootstrap(tenant: str, password: str | None = None, reset: bool = False) -> 
     return {"graph": tg.name, "users": DEMO_USERS, "password": password}
 
 
+def ensure_demo(tenant: str, pack: str, password: str | None = None) -> dict:
+    """Seed the demo customer (schema, demo users, practice network) only when its graph is missing or empty.
+    Safe to run on every start: an existing graph is left untouched. Needs LEAKTRACE_DEMO_PASSWORD (or
+    `password`), so no generated password ever ends up in a log."""
+    from app.graph.client import get_db
+
+    tg = TenantGraph(tenant)
+    exists = tg.name in get_db().list_graphs()
+    nodes = rows(tg.read("stats"))[0]["nodeCount"] if exists else 0
+    if nodes:
+        return {"graph": tg.name, "seeded": False, "nodes": nodes}
+    password = password or os.getenv("LEAKTRACE_DEMO_PASSWORD")
+    if not password:
+        raise Refused({"error": "demo_password_not_set", "hint": "set LEAKTRACE_DEMO_PASSWORD"})
+    bootstrap(tenant, password=password)
+    counts = import_pack(tg, load_pack(pack))
+    return {"graph": tg.name, "seeded": True, **counts, "users": sorted(DEMO_USERS)}
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="leaktrace")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -70,6 +91,9 @@ def main(argv=None) -> int:
     s.add_argument("--reset", action="store_true", help="delete the tenant graph first")
     st = sub.add_parser("stats", help="node and relationship counts for a tenant graph")
     st.add_argument("--tenant", required=True)
+    ed = sub.add_parser("ensure-demo", help="seed the demo customer if its graph is empty")
+    ed.add_argument("--tenant", required=True)
+    ed.add_argument("--pack", required=True)
     b = sub.add_parser("bootstrap", help="create schema and one demo user per role")
     b.add_argument("--tenant", required=True)
     b.add_argument("--reset", action="store_true")
@@ -103,6 +127,8 @@ def main(argv=None) -> int:
             print(json.dumps({"graph": tg.name, **import_pack(tg, load_pack(a.pack))}))
         elif a.cmd == "stats":
             print(json.dumps(rows(tg.read("stats"))[0], default=dict))
+        elif a.cmd == "ensure-demo":
+            print(json.dumps(ensure_demo(a.tenant, a.pack)))
         elif a.cmd == "bootstrap":
             print(json.dumps(bootstrap(a.tenant, reset=a.reset)))
         elif a.cmd == "add-user":

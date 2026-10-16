@@ -3,6 +3,11 @@ services:
     # Pinned by digest (falkordb/falkordb:latest as pulled on 2026-10-11) so every run uses the same build.
     image: falkordb/falkordb@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
     container_name: leaktrace-falkordb
+    # A FalkorDB panic exits the whole server; come back on its own, and keep an append-only file so a
+    # crash loses at most about a second of writes instead of everything since the last snapshot.
+    restart: unless-stopped
+    environment:
+      REDIS_ARGS: "--appendonly yes --appendfsync everysec"
     ports:
       - "${FALKORDB_PORT:-6380}:6379"
       - "${FALKORDB_BROWSER_PORT:-3000}:3000"

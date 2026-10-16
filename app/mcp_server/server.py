@@ -56,5 +56,15 @@ def execution_status(decision_id: str) -> dict:
     return {"found": True, **r}
 
 
+@server.tool()
+def ask_leaktrace(question: str) -> dict:
+    """Answer a question about the network and the company's documents, tickets and chats, with sources: why a
+    valve was avoided, who owns or knows an asset, what we know about it. Every [id] in the answer is checked to
+    exist on the map and to come from the search; otherwise the answer is "I don't know". Read-only."""
+    from app.brain.ask import ask
+
+    return ask(_graph(), question)
+
+
 if __name__ == "__main__":
     server.run("stdio")

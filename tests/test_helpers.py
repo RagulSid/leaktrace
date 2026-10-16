@@ -1,19 +1,16 @@
 """The six helpers: they choose tools in a loop, hand work on only through Task nodes, and cannot do anything
 the code does not allow, whatever the chooser asks for.
 
-These tests use the fixed offline chooser (RuleChooser) so they repeat exactly, a scripted chooser that tries
-things it must not, and a fake model client for the language-model chooser's message handling. No language
-model is called here.
+These tests use the fixed offline chooser (RuleChooser) so they repeat exactly, and a scripted chooser that
+tries things it must not. The model chooser is tested against a fake server in test_model_chooser.py.
 """
 
 import json
-from types import SimpleNamespace
-
 import pytest
 
 from app import config
-from app.agents import choosers, runtime
-from app.agents.choosers import LLMChooser, RuleChooser, ToolCall
+from app.agents import runtime
+from app.agents.choosers import RuleChooser, ToolCall
 from app.agents.roles import ROLES
 from app.graph.client import TenantGraph, rows
 from scenario_generator.run import Session, run, run_helpers
@@ -196,53 +193,3 @@ def test_expired_helper_lease_reopens_the_step(s1_open, monkeypatch):
     swept = service.sweep(tg)
     assert claimed["id"] in swept["helper_steps_released"]
     assert tg._g.ro_query("MATCH (t:Task {id:$t}) RETURN t.status", {"t": claimed["id"]}).result_set == [["open"]]
-
-
-# ---------------------------------------------------------------- the language-model chooser (fake client)
-
-
-class FakeMessages:
-    def __init__(self, replies):
-        self.replies, self.calls = list(replies), []
-
-    def create(self, **kw):
-        self.calls.append(kw)
-        return self.replies.pop(0)
-
-
-def _block(**kw):
-    return SimpleNamespace(**kw)
-
-
-def test_llm_chooser_sends_tools_and_history_and_reads_the_tool_call():
-    role = ROLES["triage"]
-    fake = FakeMessages([
-        SimpleNamespace(content=[_block(type="text", text="Looking first."),
-                                 _block(type="tool_use", id="tu_1", name="look_at_problem", input={})]),
-        SimpleNamespace(content=[_block(type="text", text="no tool")]),
-        SimpleNamespace(content=[_block(type="text", text="Problem P is resolved. Practice data.")]),
-    ])
-    c = LLMChooser(client=SimpleNamespace(messages=fake), model="test-model")
-    assert c.name == "llm:test-model"
-    call = c.choose(role, {"problem": "INC-1"}, [])
-    assert (call.id, call.name, call.args) == ("tu_1", "look_at_problem", {})
-    sent = fake.calls[0]
-    assert sent["model"] == "test-model" and sent["system"] == role.prompt
-    assert sent["tool_choice"] == {"type": "any", "disable_parallel_tool_use": True}
-    assert {t["name"] for t in sent["tools"]} == set(role.tools)
-    assert all(t["input_schema"]["type"] == "object" and t["description"] for t in sent["tools"])
-    hist = [choosers.Step(call, {"zones": ["Z-A"]}), choosers.Step(ToolCall("tu_2", "set_severity", {"level": "x"}),
-                                                                  {"refused": "bad_level"})]
-    assert c.choose(role, {"problem": "INC-1"}, hist) is None  # the model answered without a tool
-    msgs = fake.calls[1]["messages"]
-    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "assistant", "user"]
-    assert msgs[1]["content"][0] == {"type": "tool_use", "id": "tu_1", "name": "look_at_problem", "input": {}}
-    assert msgs[2]["content"][0]["tool_use_id"] == "tu_1" and msgs[2]["content"][0]["is_error"] is False
-    assert msgs[4]["content"][0]["is_error"] is True  # a refusal is shown to the model as an error result
-    assert c.prose_writer({"id": "P"}) == "Problem P is resolved. Practice data."
-
-
-def test_default_chooser_without_a_key_is_the_rule_chooser(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    assert isinstance(choosers.default("auto"), RuleChooser)
-    assert isinstance(choosers.default("rules"), RuleChooser)

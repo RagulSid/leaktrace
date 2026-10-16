@@ -225,8 +225,9 @@ def run_helper_round(tenant: str, *, process: bool = False, chooser: str = "rule
     from app.graph.client import TenantGraph
 
     c = choosers.default(chooser)
-    return {"pid": os.getpid(), "chooser": c.name,
-            "steps": [asdict(d) for d in runtime.drain(TenantGraph(tenant), c)]}
+    steps = [asdict(d) for d in runtime.drain(TenantGraph(tenant), c)]
+    return {"pid": os.getpid(), "chooser": c.name, "steps": steps, "model_calls": getattr(c, "calls", 0),
+            "fallbacks": getattr(c, "fallbacks", [])}
 
 
 def _latest_decision(sess: Session, incident: str) -> dict | None:
@@ -239,12 +240,12 @@ def _latest_decision(sess: Session, incident: str) -> dict | None:
 
 
 def drive_helpers(sess: Session, incident: str, plant: Plant, crew: FieldWorker, *, process: bool = False,
-                  approve_as: str | None = "operator2", rounds: int = 10) -> list[dict]:
+                  approve_as: str | None = "operator2", rounds: int = 10, chooser: str = "rules") -> list[dict]:
     """Helpers, people and the plant take turns until nothing moves: helpers run; a plan waiting for a
     person's OK is approved (once); the crew works open valve steps; after the moves the meters report."""
     log, approved = [], set()
     for _ in range(rounds):
-        r = run_helper_round(sess.tenant, process=process)
+        r = run_helper_round(sess.tenant, process=process, chooser=chooser)
         log.append(r)
         moved = bool(r["steps"])
         d = _latest_decision(sess, incident)
@@ -266,7 +267,7 @@ def drive_helpers(sess: Session, incident: str, plant: Plant, crew: FieldWorker,
 
 def run_helpers(name: str, variant: str, tenant: str, seed: int, *, reset: bool = False, base_url: str | None = None,
                 password: str | None = None, import_pack: bool = False, process: bool = False,
-                lease_s: int = 30) -> dict:
+                lease_s: int = 30, chooser: str = "rules") -> dict:
     if variant not in HELPER_VARIANTS.get(name, ()):
         raise ValueError(f"no helper variant {variant!r} for {name}; choose from {HELPER_VARIANTS.get(name)}")
     sess = _start(tenant, reset=reset, base_url=base_url, password=password)
@@ -276,7 +277,7 @@ def run_helpers(name: str, variant: str, tenant: str, seed: int, *, reset: bool 
     plant = Plant(json.loads(PACK.read_text(encoding="utf-8")), seed=seed, leak_segment=scen.get("leak_segment"),
                   leak_flow=scen.get("leak_flow") or 0.0, stuck=["V-09"] if variant == "stuck_v09" else [],
                   passing=["V-04"] if variant == "passing_valve" else [])
-    rounds = drive_helpers(sess, inc, plant, FieldWorker(sess, "tech1", plant, lease_s), process=process)
+    rounds = drive_helpers(sess, inc, plant, FieldWorker(sess, "tech1", plant, lease_s), process=process, chooser=chooser)
     timeline = sess.get(f"/agents/timeline?incident={inc}", "operator1")
     decisions = [sess.get(f"/decisions/{d}/status", "operator1") for d in sess.get(f"/incidents/{inc}", "operator1")["decisions"]]
     report = sess.c.get(f"/incidents/{inc}/report", headers=sess.headers("operator1"))

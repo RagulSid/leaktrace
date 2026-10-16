@@ -4,7 +4,7 @@ import pytest
 from redis.exceptions import ResponseError
 
 from app.graph import queries
-from app.graph.client import QUERY_LOG, TenantGraph, rows
+from app.graph.client import QUERY_LOG, GraphUnavailable, TenantGraph, rows
 from app.graph.tenancy import InvalidTenant, graph_name
 
 
@@ -71,5 +71,6 @@ def test_query_log_records_calls(dc):
 
 def test_unknown_tenant_graph_reads_empty_not_other_tenant(dc):
     other = TenantGraph("t_never_created_x")
-    with pytest.raises(ResponseError):
+    with pytest.raises(GraphUnavailable) as e:
         other.read("stats")  # no graph yet: FalkorDB refuses rather than returning another tenant's data
+    assert e.value.reason == "graph_empty" and e.value.graph == "lt_t_never_created_x"
