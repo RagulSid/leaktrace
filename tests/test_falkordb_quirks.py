@@ -60,3 +60,22 @@ def test_a_failing_query_applies_none_of_its_writes(g):
         g.query("MATCH (v:V {id: 'a'}) SET v.state = 'closed' CREATE (:Marker) WITH v RETURN 1 / (size(v.id) - 1)")
     assert g.query("MATCH (v:V) RETURN v.state").result_set == [["open"]]
     assert g.query("MATCH (m:Marker) RETURN count(m)").result_set == [[0]]
+
+
+def test_lookup_after_path_aggregation_and_unwind_matches_nothing(make_graph):
+    """A query that starts with a path MATCH, then `OPTIONAL MATCH ... WITH ..., count(x)` and `UNWIND`, finds
+    nothing with `MATCH (t:Entity) WHERE t.id = o.target`; starting from a single node it works.
+    Workaround in work_orders_create: do the count inside a CALL subquery."""
+    g = make_graph()._g
+    g.query("CREATE (:Incident {id:'I'})-[:DECIDED]->(:Decision {id:'D'}), (:Entity {id:'Z'})")
+    orders = {"orders": [{"target": "Z"}]}
+    tail = "UNWIND $orders AS o MATCH (t:Entity) WHERE t.id = o.target RETURN t.id"
+    from_path = ("MATCH (i:Incident)-[:DECIDED]->(d:Decision {id:'D'}) OPTIONAL MATCH (x:Nothing)-[:R]->(d) "
+                 "WITH i, d, count(x) AS n WHERE n = 0 " + tail)
+    from_node = ("MATCH (d:Decision {id:'D'}) OPTIONAL MATCH (x:Nothing)-[:R]->(d) WITH d, count(x) AS n WHERE n = 0 "
+                 + tail)
+    in_call = ("MATCH (i:Incident)-[:DECIDED]->(d:Decision {id:'D'}) CALL { WITH d OPTIONAL MATCH (x:Nothing)-[:R]->(d) "
+               "RETURN count(x) AS n } WITH i, d, n WHERE n = 0 " + tail)
+    assert g.ro_query(from_path, orders).result_set == []
+    assert g.ro_query(from_node, orders).result_set == [["Z"]]
+    assert g.ro_query(in_call, orders).result_set == [["Z"]]

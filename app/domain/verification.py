@@ -17,10 +17,11 @@ Checks (all must pass):
 A leak sensor is deliberately not a check: water already on the floor keeps it wet after the leak is cut off.
 """
 
+from app import config
 from app.domain.confidence import Balance, tolerance
 from app.domain.constraints import Check
 
-ISOLATION_MAX_FLOW = tolerance(0.0)  # 2.0: what a closed-off section's inflow meter may still show (noise)
+ISOLATION_MAX_FLOW = config.ISOLATION_MAX_FLOW  # what a closed-off section's inflow meter may still show (noise)
 
 
 def instruments(expected: dict, balance: Balance) -> list[str]:

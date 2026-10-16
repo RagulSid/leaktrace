@@ -15,7 +15,7 @@ NODE_LABELS = frozenset({
     # authority, memory, coordination
     "AuthorityPolicy", "Episode", "Fact", "Playbook", "Conversation", "Message", "Agent", "Task", "User",
     # company knowledge
-    "Person", "Team", "Vendor", "Document", "Chunk", "Ticket", "Policy", "SOP", "Review",
+    "Person", "Team", "Vendor", "Document", "Chunk", "Ticket", "Policy", "SOP", "Review", "IncidentReport",
 })
 
 REL_TYPES = frozenset({

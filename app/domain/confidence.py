@@ -18,19 +18,21 @@ single alarm, a single anomaly or a single report is never enough to act on.
 
 from dataclasses import dataclass, field
 
+from app import config
+
 W_LEAK_ALARM = 0.35
 W_NEARBY_ALARM = 0.10
 W_PRESSURE = 0.20
 W_IMBALANCE = 0.25
 W_REPORT = 0.10
 W_SECOND_REPORTER = 0.10
-CONTRADICTION_PENALTY = 0.30
-SINGLE_KIND_CAP = 0.40
+CONTRADICTION_PENALTY = config.CONTRADICTION_PENALTY
+SINGLE_KIND_CAP = config.SINGLE_KIND_CAP
 KINDS_TOTAL = 4
 
 
 def tolerance(inflow: float) -> float:
-    return max(2.0, 0.05 * abs(inflow))
+    return max(config.BALANCE_TOLERANCE_ABS, config.BALANCE_TOLERANCE_FRAC * abs(inflow))
 
 
 @dataclass
@@ -87,7 +89,7 @@ class Confidence:
 
 
 def level_for(score: float) -> str:
-    return "high" if score >= 0.75 else "medium" if score >= 0.5 else "low"
+    return "high" if score >= config.CONFIDENCE_HIGH else "medium" if score >= config.CONFIDENCE_MEDIUM else "low"
 
 
 def assess(s: Signals) -> Confidence:

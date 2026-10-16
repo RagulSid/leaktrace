@@ -1,14 +1,18 @@
-"""Reading intake (L0): sensor states and meter values. Sensors in ALARM or ANOMALY open or join a problem.
+"""Reading intake (L0): sensor states and meter values.
+
+A sensor that goes into ALARM or ANOMALY opens a problem in its zone, or joins the open one. A sensor that
+was already in that state only joins an open problem: water still on the floor after a verified fix does
+not reopen it. A new alarm after the sensor was reset opens a new problem.
 
 Each reading updates the instrument's current state or value and appends a Reading node; history is
 capped at READING_HISTORY per instrument.
 """
 
-from app import clock, ids
+from app import clock, config, ids
 from app.graph.client import TenantGraph, rows
 from app.intake.triage import incident_for
 
-READING_HISTORY = 50
+READING_HISTORY = config.READING_HISTORY
 SENSOR_STATES = {"OK", "ALARM", "ANOMALY"}
 ALERT_STATES = {"ALARM", "ANOMALY"}
 
@@ -49,5 +53,9 @@ def ingest_readings(tg: TenantGraph, readings: list[dict], source: str = "synthe
         c = ctx[r["id"]]
         if c["instrument"] == "sensor" and r["state"] in ALERT_STATES:
             zones = [c["zone"]] if c["zone"] else []
-            incidents[r["id"]] = incident_for(tg, zones, [r["id"], *c["watches"]], source)
+            new_alarm = c["prev_state"] not in ALERT_STATES
+            found = incident_for(tg, zones, [r["id"], *c["watches"]], source, create=new_alarm)
+            if found:
+                incidents[r["id"]] = found
+            c["prev_state"] = r["state"]  # a second reading in the same batch is not a new alarm
     return {"applied": len(out_rows), "incidents": incidents}

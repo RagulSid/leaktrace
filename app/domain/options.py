@@ -8,8 +8,8 @@ of boundary valves to close, alone or with one backup valve opened, plus "do not
 from dataclasses import dataclass, field
 from itertools import combinations
 
-MAX_BOUNDARY = 4
-MAX_BACKUPS = 3
+from app import config
+
 
 
 @dataclass(frozen=True)
@@ -53,8 +53,8 @@ class Plan:
 
 def generate(key: str, boundary: list[str], backups: list[str]) -> list[Plan]:
     """`key` is a server-generated lowercase id used to build plan ids (and the what-if property names)."""
-    boundary = sorted(set(boundary))[:MAX_BOUNDARY]
-    backups = [b for b in sorted(set(backups)) if b not in boundary][:MAX_BACKUPS]
+    boundary = sorted(set(boundary))[:config.MAX_BOUNDARY_VALVES]
+    backups = [b for b in sorted(set(backups)) if b not in boundary][:config.MAX_BACKUP_VALVES]
     plans = [Plan(f"o_{key}_0")]
     n = 1
     for size in range(1, len(boundary) + 1):

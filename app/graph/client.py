@@ -55,7 +55,7 @@ def _connect() -> FalkorDB:
         host=config.FALKORDB_HOST,
         port=config.FALKORDB_PORT,
         password=config.FALKORDB_PASSWORD,
-        socket_connect_timeout=3,
+        socket_connect_timeout=config.FALKORDB_CONNECT_TIMEOUT_S,
     )
 
 

@@ -1,3 +1,9 @@
+import os
+
+# Tests run against a local FalkorDB: a short connect timeout makes the FalkorDB-down tests fail fast
+# (on Windows a refused connection otherwise takes about 2 s per attempt). Subprocesses inherit it.
+os.environ.setdefault("FALKORDB_CONNECT_TIMEOUT_S", "0.5")
+
 import uuid
 from pathlib import Path
 

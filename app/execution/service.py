@@ -19,14 +19,17 @@ from app import permissions as perm
 from app.actuation.adapter import ACTUATOR, Move, make_before_break
 from app.agents import investigate as investigation
 from app.domain import confidence as conf
-from app.domain import fingerprint, lifecycle
+from app.domain import breakglass, fingerprint, lifecycle
 from app.domain import verification as verif
+from app.actuation import notify
+from app.execution import audit as audit_log
 from app.graph.client import TenantGraph, rows
 
 SYSTEM = perm.SYSTEM
 AUTO = "auto"  # actor name for auto mode
 CHECKER = "checker"  # actor name for automatic verification
-STUCK_FACT_CONFIDENCE = 0.8  # a field report that a valve did not move
+BREAK_GLASS = "break_glass"  # actor name for the emergency path (BUILD_PROMPT §5)
+AGENT_TASK_KINDS = ("triage", "investigate", "plan", "dispatch", "verify", "record")
 
 
 class ExecError(Exception):
@@ -155,15 +158,59 @@ def sweep(tg: TenantGraph, now: float | None = None) -> dict:
         if r["since"] is not None and now > r["since"] + window:
             verify(tg, r["decision"], CHECKER, SYSTEM, wait_ok=False, do_sweep=False)
             timed_out.append(r["decision"])
+    glass = _break_glass(tg, now)
+    agent_released = rows(tg.write("agent_tasks_release_expired", {"now": now, "kinds": list(AGENT_TASK_KINDS)}))[0]["ids"]
+    woken = rows(tg.write("agent_tasks_wake", {"now": now}))[0]["ids"]
     return {"released": [r["task"] for r in released], "aborted": aborted, "approvals_expired": expired,
-            "verification_timeouts": timed_out}
+            "verification_timeouts": timed_out, "break_glass": glass, "helper_steps_released": agent_released,
+            "helper_steps_woken": woken}
+
+
+def _break_glass(tg: TenantGraph, now: float) -> list[dict]:
+    """Emergency path (BUILD_PROMPT §5): a plan that needs a person's OK, with a leak alarm and live
+    equipment near the water, waiting longer than the policy's break_glass_wait_s. The minimal isolating plan
+    runs only if it passes conditions 1, 2, 3, 5, 7 and 8 (app/domain/breakglass.py) and is the committed
+    plan; it still goes through the stale-decision guard. Either way a review item is queued and people are
+    notified. Each decision is looked at once."""
+    out = []
+    for c in rows(tg.read("break_glass_candidates")):
+        did = c["decision"]
+        st = load(tg, did)
+        d = st["decision"]
+        record = json.loads(d["explain_json"])
+        if breakglass.trigger(record) is None:
+            tg.write("decision_mark_break_glass", {"id": did, "result": "not_applicable"})
+            continue
+        policy = _live_policy(tg, d.get("zone"))
+        if not breakglass.due(policy, d["ts"], now):
+            continue
+        verdict = breakglass.check(record, policy)
+        tg.write("decision_mark_break_glass", {"id": did, "result": "execute" if verdict["execute"] else "refused"})
+        if verdict["execute"]:
+            try:
+                approve(tg, did, BREAK_GLASS, SYSTEM, break_glass=True)
+                execute(tg, did, BREAK_GLASS, SYSTEM)
+            except ExecError as e:
+                verdict = {**verdict, "execute": False, "refused_by": e.code, "detail": e.detail}
+        kind = "break_glass" if verdict["execute"] else "escalation"
+        audit_log.write(tg, did, kind="break_glass", actor=BREAK_GLASS, role=SYSTEM, frm="L3",
+                    to="executed" if verdict["execute"] else "refused",
+                    reason="break_glass" if verdict["execute"] else "break_glass_refused", detail=verdict)
+        tg.write("review_write", {"decision": did, "id": "REV-" + ids.audit_id()[4:], "kind": kind, "ts": now,
+                                  "reason": ", ".join(verdict["failed"]) or "executed without approval",
+                                  "detail": json.dumps(verdict, sort_keys=True, default=str)})
+        notify.send(tg, c["incident"], to=["operator", "manager"],
+                    message=(f"Emergency action taken on {did}: needs review" if verdict["execute"]
+                             else f"Emergency action refused on {did}: people must decide now"))
+        out.append({"decision": did, **verdict})
+    return out
 
 
 # ---------------------------------------------------------------- propose
 
 
 def investigate(tg: TenantGraph, incident: str, requested_by: str, role: str, *, auto: bool = True,
-                previous: str | None = None) -> dict:
+                previous: str | None = None, cap: dict | None = None) -> dict:
     """Investigate and commit a decision. Older open decisions on the same problem are superseded. An L2
     decision is executed straight away if auto mode is on (it is re-checked at that moment)."""
     if role != SYSTEM:
@@ -174,7 +221,7 @@ def investigate(tg: TenantGraph, incident: str, requested_by: str, role: str, *,
     live = rows(tg.read("decisions_for_incident", {"incident": incident, "statuses": list(lifecycle.IN_PROGRESS)}))
     if live:
         raise ExecError("execution_in_progress", decision=live[0]["id"], status=live[0]["status"])
-    rec = investigation.run(tg, incident, actor="planner", requested_by=requested_by)
+    rec = investigation.run(tg, incident, actor="planner", requested_by=requested_by, cap=cap)
     new = rec["decision_id"]
     for o in rows(tg.read("decisions_for_incident", {"incident": incident, "statuses": list(lifecycle.OPEN)})):
         if o["id"] != new:
@@ -182,6 +229,12 @@ def investigate(tg: TenantGraph, incident: str, requested_by: str, role: str, *,
     if previous:
         tg.write("decision_supersedes", {"new": new, "old": previous})
     rec["status"] = "proposed" if rec["kind"] == "act" else "recorded"
+    return after_commit(tg, rec, auto=auto)
+
+
+def after_commit(tg: TenantGraph, rec: dict, *, auto: bool = True) -> dict:
+    """An L2 decision runs straight away when auto mode is on (checked again at that moment)."""
+    new = rec["decision_id"]
     if auto and rec["kind"] == "act" and rec["authority"]["level"] == "L2":
         try:
             rec["execution"] = execute(tg, new, AUTO, SYSTEM)
@@ -199,7 +252,7 @@ def _live_policy(tg: TenantGraph, zone: str | None) -> dict | None:
 
 
 def approve(tg: TenantGraph, decision: str, actor: str, role: str, ttl_s: int | None = None,
-            note: str | None = None) -> dict:
+            note: str | None = None, *, break_glass: bool = False) -> dict:
     system = role == SYSTEM
     if not system:
         _require(role, perm.APPROVERS, "approve")
@@ -209,7 +262,7 @@ def approve(tg: TenantGraph, decision: str, actor: str, role: str, ttl_s: int | 
         raise ExecError("nothing_to_approve", kind=d["kind"])
     if d["authority_level"] == "L4":
         raise ExecError("people_decide", authority_level="L4")
-    if system and d["authority_level"] != "L2":
+    if system and d["authority_level"] != "L2" and not (break_glass and d["authority_level"] == "L3"):
         raise Forbidden("auto_approval_needs_l2", authority_level=d["authority_level"])
     if not system and actor == d.get("requested_by"):
         raise Forbidden("self_approval", requested_by=actor)
@@ -218,7 +271,7 @@ def approve(tg: TenantGraph, decision: str, actor: str, role: str, ttl_s: int | 
     ttl = config.APPROVAL_TTL_S if ttl_s is None else int(ttl_s)
     if not 1 <= ttl <= config.APPROVAL_TTL_S:
         raise BadRequest("bad_ttl", allowed=[1, config.APPROVAL_TTL_S])
-    p = _audit(actor, role, "auto_mode" if system else "approved",
+    p = _audit(actor, role, "break_glass" if break_glass else "auto_mode" if system else "approved",
                {"authority_level": d["authority_level"], "note": note, "ttl_s": ttl})
     out = rows(tg.write("approval_write", {"id": decision, "approval": ids.approval_id(), "by": actor,
                                            "expires_at": p["ts"] + ttl, "ttl_s": ttl, "note": note, **p}))
@@ -316,7 +369,7 @@ def execute(tg: TenantGraph, decision: str, actor: str, role: str) -> dict:
     out = rows(tg.write("execution_start", {
         "decision": decision, "valve_ids": [m.valve for m in moves], "prior": {v: p["state"] for v, p in prior.items()},
         "execution": xid, "zone": d.get("zone"), "adapter": ACTUATOR.name, "simulated": ACTUATOR.simulated,
-        "authorized_by": d["policy"] if ap["by"] == AUTO else ap["id"],
+        "authorized_by": d["policy"] if ap["by"] in (AUTO, BREAK_GLASS) else ap["id"],
         "prior_json": json.dumps(prior, sort_keys=True), "expected_json": json.dumps(_expected(record), sort_keys=True),
         "verify_window_s": (policy or {}).get("verify_window_s") or config.VERIFY_WINDOW_S,
         "tasks": ACTUATOR.commands(xid, "forward", moves),
@@ -376,9 +429,11 @@ def report(tg: TenantGraph, task: str, worker: str, role: str, key: str, outcome
         out = rows(tg.write("move_failed", {
             **base, "reason": why, "final_status": "failed" if forward else "rollback_failed", "fact": ids.fact_id(),
             "statement": f"{t['valve']} did not move to {t['target']} when commanded (field report on {task})",
-            "fact_confidence": STUCK_FACT_CONFIDENCE}))
+            "fact_confidence": config.STUCK_FACT_CONFIDENCE}))
     if not out:
         raise ExecError("lease_lost", task=task)
+    if result == "done" and out[0]["status"] == "rolled_back":
+        _after_undo(tg, decision)
     return {"duplicate": False, "task": task, "result": result, "reason": why, **status(tg, decision, do_sweep=False)}
 
 
@@ -418,9 +473,67 @@ def verify(tg: TenantGraph, decision: str, actor: str, role: str, *, wait_ok: bo
     if not out:
         raise _illegal(tg, decision, to)
     if not passed and d["authority_level"] == "L2":
-        # handled automatically, so undone automatically (BUILD_PROMPT §5 auto-rollback)
+        # handled automatically, so undone automatically (BUILD_PROMPT §5 auto-rollback), after recording
+        # which valve is suspected of not sealing
+        _suspect_valves(tg, decision, x, failed, out[0]["verification"])
         return rollback(tg, decision, AUTO, SYSTEM, "auto_rollback: verification failed")
     return status(tg, decision, do_sweep=False)
+
+
+def _suspect_valves(tg: TenantGraph, decision: str, x: dict, failed: list[str], verification: str) -> list[str]:
+    """After an automatic plan failed its check because water kept flowing, record the valves it closed.
+    One closed valve: an active 'stuck' fact (it did not seal), so the next plan will not rely on it. More than
+    one: a 'suspect' fact on each, which does not block plans (we cannot tell which one leaks)."""
+    if not ({"leak_isolated", "balance_restored"} & set(failed)):
+        return []
+    closed = [t["valve"] for t in rows(tg.read("execution_tasks", {"execution": x["id"]}))
+              if t["phase"] == "forward" and t["status"] == "done" and t["target"] == "closed"]
+    kind = "stuck" if len(closed) == 1 else "suspect"
+    made = []
+    for v in closed:
+        rows(tg.write("fact_write", {
+            "about": v, "evidence": verification, "id": ids.fact_id(), "kind": kind, "ts": clock.now(),
+            "statement": f"{v} was closed by {decision} but the meters showed water still flowing: it may not seal",
+            "confidence": config.NOT_SEALING_FACT_CONFIDENCE, "source": "verification"}))
+        made.append(v)
+    return made
+
+
+def _after_undo(tg: TenantGraph, decision: str) -> dict | None:
+    """When an automatic plan has been undone, plan again, and the new plan always needs a person's OK."""
+    st = load(tg, decision)
+    x = st["execution"]
+    if not x or x.get("rollback_requested_by") != AUTO:
+        return None
+    record = json.loads(st["decision"]["explain_json"])
+    cap = {"reason": "automatic_plan_failed_its_check", "previous": decision,
+           "original_fallback": record.get("fallback")}
+    new = investigate(tg, st["incident"], AUTO, SYSTEM, auto=False, previous=decision, cap=cap)
+    if config.AUTO_TRIAGE:  # the helpers create the jobs for people and the report for the new decision
+        tg.write("agent_task_create", {"incident": st["incident"], "id": ids.task_id(), "kind": "dispatch",
+                                       "payload": json.dumps({"incident": st["incident"], "decision": new["decision_id"]}),
+                                       "ts": clock.now(), "actor": AUTO})
+    audit_log.write(tg, decision, kind="decision", actor=AUTO, role=SYSTEM, frm="rolled_back", to="rolled_back",
+                reason="escalated_to_people", detail={"new_decision": new["decision_id"], "new_kind": new["kind"],
+                                                      "new_authority": new["authority"]["level"]})
+    return new
+
+
+def close_problem(tg: TenantGraph, incident: str, actor: str, role: str, reason: str) -> dict:
+    """A person closes a problem fixed outside a verified plan. Refused while a plan is being carried out."""
+    _require(role, perm.DECIDERS, "close_problem")
+    if not rows(tg.read("incident_get", {"id": incident})):
+        raise NotFound("no_such_problem", incident=incident)
+    sweep(tg)
+    live = rows(tg.read("decisions_for_incident", {"incident": incident, "statuses": list(lifecycle.IN_PROGRESS)}))
+    if live:
+        raise ExecError("execution_in_progress", decision=live[0]["id"], status=live[0]["status"])
+    for o in rows(tg.read("decisions_for_incident", {"incident": incident, "statuses": list(lifecycle.OPEN)})):
+        _supersede(tg, o["id"], actor, role, "problem_closed", {"incident": incident})
+    p = _audit(actor, role, reason)
+    if not rows(tg.write("incident_close", {"id": incident, "by": actor, **p})):
+        raise ExecError("not_open", incident=incident)
+    return rows(tg.read("incident_get", {"id": incident}))[0]
 
 
 def on_readings(tg: TenantGraph) -> list[dict]:
@@ -464,6 +577,8 @@ def rollback(tg: TenantGraph, decision: str, actor: str, role: str, reason: str 
                                            "tasks": cmds, "audit2": ids.audit_id(), "seq2": clock.next_ns(), **p}))
     if not out:
         raise _illegal(tg, decision, "rolling_back")
+    if not cmds:
+        _after_undo(tg, decision)
     return status(tg, decision, do_sweep=False)
 
 

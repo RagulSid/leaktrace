@@ -130,12 +130,17 @@ class Plant:
         s = self.solve()
         links = self.pack["links"]
         measures = {ln["from"]: ln["to"] for ln in links if ln["type"] == "MEASURES"}
+        direction = {ln["from"]: (ln.get("props") or {}).get("direction") for ln in links if ln["type"] == "MEASURES"}
         monitors = {ln["from"]: ln["to"] for ln in links if ln["type"] == "MONITORS"}
         out = []
         for i in sorted(self.nodes):
             n = self.nodes[i]
             if "Meter" in n["labels"] and i in measures:
-                v = s["inflow"][measures[i]] + self.rng.uniform(-0.4, 0.4)
+                seg = measures[i]
+                v = s["inflow"][seg]
+                if direction.get(i) == "out" and seg == self.leak_segment:
+                    v -= s["leak"]  # an outflow meter sits after the leak: it sees only what goes on to the rack
+                v += self.rng.uniform(-0.4, 0.4)
                 out.append({"id": i, "ts": ts, "value": round(max(0.0, v), 2)})
             elif "Sensor" in n["labels"]:
                 watched = monitors.get(i)

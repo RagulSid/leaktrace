@@ -122,9 +122,20 @@ def trace_impact(ctx: ToolContext, segment: str) -> dict:
 
 
 @tool(lambda r: f"{sum(len(a['history']) for a in r)} past problems, {sum(len(a['facts']) for a in r)} facts")
-def recall_memory(ctx: ToolContext) -> list[dict]:
-    """Q4: earlier problems on the same assets with their decisions, and active facts about them."""
-    return rows(ctx.tg.read("q4_recall_incidents", {"incident": ctx.incident}))
+def recall_memory(ctx: ToolContext, segment: str | None = None) -> list[dict]:
+    """Q4: earlier problems on the same assets with their decisions, and active facts about them. With a
+    section, also the facts about the valves a plan for it could use (its boundary valves and the closed
+    backup valves), so a valve recorded stuck is known before planning."""
+    out = rows(ctx.tg.read("q4_recall_incidents", {"incident": ctx.incident}))
+    if segment:
+        seen = {a["asset"] for a in out}
+        valves = [r["id"] for r in rows(ctx.tg.read("boundary_valves", {"segment": segment}))]
+        valves += [r["id"] for r in rows(ctx.tg.read("closed_valves"))]
+        facts: dict[str, list[str]] = {}
+        for f in rows(ctx.tg.read("facts_about", {"ids": sorted(set(valves) - seen)})):
+            facts.setdefault(f["about"], []).append(f["statement"])
+        out += [{"asset": v, "history": [], "facts": fs} for v, fs in sorted(facts.items())]
+    return out
 
 
 @tool(lambda r: f"{len(r['plans'])} plans from boundary {r['boundary']} and backups {r['backups']}")

@@ -13,9 +13,17 @@ L2 (handled automatically) only if all eight envelope conditions hold:
   no_life_safety       no L4-class effect
   rollback_and_check   an undo plan and a verification check exist before acting
 Any failure gives L3 (needs approval) with the failing conditions listed; an L4-class effect gives L4.
+
+Earned autonomy: if the only thing above the ceiling is criticality, and a playbook for the same plan on the
+same section has at least policy.min_playbook_successes verified successes and no failures, the ceiling is
+widened for this decision, but never above policy.auto_promotion_ceiling (set by the Manager). The widening
+is returned in `widened` and written to the audit trail. Nothing else is ever widened, and nothing here can
+change the policy itself.
 """
 
 from dataclasses import dataclass, field
+
+from app import config
 
 CONDITIONS = (
     "policy_active",
@@ -42,6 +50,7 @@ class AuthorityInput:
     l4_effects: list[str] = field(default_factory=list)
     rollback_defined: bool = True
     verification_defined: bool = True
+    playbook: dict | None = None  # {id, success_count, failure_count} for this plan on this section
 
 
 @dataclass
@@ -49,6 +58,7 @@ class AuthorityResult:
     level: str  # "L2" | "L3" | "L4"
     failed: list[dict]
     passed: list[str]
+    widened: dict | None = None
 
     @property
     def failed_codes(self) -> list[str]:
@@ -78,8 +88,15 @@ def compute(i: AuthorityInput) -> AuthorityResult:
         fail("no_starved_critical", count=i.starved_critical)
 
     ceiling = p.get("max_auto_criticality")
+    widened = None
     if ceiling is None or i.max_affected_criticality > ceiling:
-        fail("criticality_ceiling", value=i.max_affected_criticality, allowed=ceiling)
+        earned = earned_ceiling(p, i.playbook)
+        if ceiling is not None and earned is not None and i.max_affected_criticality <= earned:
+            widened = {"from": ceiling, "to": earned, "playbook": i.playbook["id"],
+                       "successes": i.playbook["success_count"], "value": i.max_affected_criticality}
+        else:
+            fail("criticality_ceiling", value=i.max_affected_criticality, allowed=ceiling,
+                 **({"earned_up_to": earned} if earned is not None else {}))
 
     if not i.reversible_feasible:
         fail("reversible_feasible")
@@ -98,4 +115,16 @@ def compute(i: AuthorityInput) -> AuthorityResult:
 
     codes = {f["code"] for f in failed}
     level = "L4" if i.l4_effects else ("L3" if failed else "L2")
-    return AuthorityResult(level, failed, [c for c in CONDITIONS if c not in codes])
+    return AuthorityResult(level, failed, [c for c in CONDITIONS if c not in codes],
+                           widened if not failed and level == "L2" else None)
+
+
+def earned_ceiling(policy: dict, playbook: dict | None) -> int | None:
+    """The widened criticality ceiling a proven playbook earns, or None. Bounded by the Manager's ceiling."""
+    if not playbook:
+        return None
+    need = policy.get("min_playbook_successes") or config.MIN_PLAYBOOK_SUCCESSES
+    top = policy.get("auto_promotion_ceiling")
+    if top is None or (playbook.get("success_count") or 0) < need or (playbook.get("failure_count") or 0) > 0:
+        return None
+    return int(top)

@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 
 from app.agents import investigate
 from app.api.auth import Principal, login, require
+from app.agents import runtime as helpers
+from app.execution import incident_report, work_orders
 from app.execution import service as execution
 from app.graph.client import GraphUnavailable, rows
 from app.graph.importer import import_pack
@@ -66,6 +68,20 @@ class ApproveIn(BaseModel):
 
 class ReasonIn(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
+
+
+class CloseIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ConfirmIn(BaseModel):
+    step: str = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class CompleteIn(BaseModel):
+    findings: str | None = Field(default=None, max_length=1000)
+    stuck_valves: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ClaimIn(BaseModel):
@@ -141,6 +157,58 @@ def incidents_get(incident: str, p: Principal = Depends(require(*VIEWERS))):
 @app.post("/incidents/{incident}/investigate")
 def incidents_investigate(incident: str, p: Principal = Depends(require(*DECIDERS))):
     return execution.investigate(p.graph(), incident, p.user, p.role)
+
+
+@app.post("/incidents/{incident}/close")
+def incidents_close(incident: str, body: CloseIn, p: Principal = Depends(require(*DECIDERS))):
+    return execution.close_problem(p.graph(), incident, p.user, p.role, body.reason)
+
+
+@app.get("/incidents/{incident}/helpers")
+def incidents_helpers(incident: str, p: Principal = Depends(require(*VIEWERS))):
+    """The helpers' hand-off chain for one problem, read from the graph."""
+    return helpers.chain(p.graph(), incident)
+
+
+@app.get("/incidents/{incident}/report")
+def incidents_report(incident: str, p: Principal = Depends(require(*VIEWERS))):
+    out = incident_report.latest(p.graph(), incident)
+    if out is None:
+        raise HTTPException(404, "no report yet")
+    return out
+
+
+@app.post("/incidents/{incident}/report")
+def incidents_report_write(incident: str, p: Principal = Depends(require(*DECIDERS))):
+    tg = p.graph()
+    if not rows(tg.read("incident_get", {"id": incident})):
+        raise HTTPException(404, "no such problem")
+    return incident_report.write(tg, incident, p.user)
+
+
+@app.get("/work-orders")
+def work_orders_list(incident: str | None = None, p: Principal = Depends(require(*VIEWERS, *FIELD))):
+    return work_orders.list_for(p.graph(), p.role, incident)
+
+
+@app.post("/work-orders/{wo}/take")
+def work_orders_take(wo: str, p: Principal = Depends(require(*FIELD))):
+    return work_orders.take(p.graph(), wo, p.user, p.role)
+
+
+@app.post("/work-orders/{wo}/confirm")
+def work_orders_confirm(wo: str, body: ConfirmIn, p: Principal = Depends(require(*FIELD))):
+    return work_orders.confirm(p.graph(), wo, p.user, p.role, body.step, body.note)
+
+
+@app.post("/work-orders/{wo}/complete")
+def work_orders_complete(wo: str, body: CompleteIn, p: Principal = Depends(require(*FIELD))):
+    return work_orders.complete(p.graph(), wo, p.user, p.role, body.findings, body.stuck_valves)
+
+
+@app.get("/reviews")
+def reviews_list(p: Principal = Depends(require(*VIEWERS))):
+    return rows(p.graph().read("reviews_list"))
 
 
 @app.get("/decisions/{decision}")

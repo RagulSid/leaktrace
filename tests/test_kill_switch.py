@@ -67,6 +67,15 @@ def test_api_fails_loudly_without_falkordb(graph_down):
         ("get", "/decisions/DEC-00000000/audit", "operator", None),
         ("post", "/tasks/claim", "tech", {}),
         ("post", "/tasks/TSK-00000000/result", "tech", {"idempotency_key": "k", "outcome": "done", "observed_state": "open"}),
+        ("post", "/incidents/INC-000000/close", "operator", {"reason": "fixed by hand"}),
+        ("get", "/incidents/INC-000000/helpers", "operator", None),
+        ("get", "/incidents/INC-000000/report", "operator", None),
+        ("post", "/incidents/INC-000000/report", "operator", None),
+        ("get", "/work-orders", "tech", None),
+        ("post", "/work-orders/WO-00000000/take", "tech", None),
+        ("post", "/work-orders/WO-00000000/confirm", "tech", {"step": "check the area"}),
+        ("post", "/work-orders/WO-00000000/complete", "tech", {}),
+        ("get", "/reviews", "manager", None),
     ]
     for method, path, role, body in calls:
         r = getattr(c, method)(path, headers=_headers(role), **({"json": body} if body is not None else {}))
@@ -81,10 +90,13 @@ def test_api_fails_loudly_without_falkordb(graph_down):
     ["approve", "--tenant", "demo", "--as", "operator2", "--decision", "DEC-00000000"],
     ["execute", "--tenant", "demo", "--as", "operator1", "--decision", "DEC-00000000"],
     ["status", "--tenant", "demo", "--as", "operator1", "--decision", "DEC-00000000"],
+    ["@worker", "--tenant", "demo", "--chooser", "rules"],
 ])
 def test_cli_fails_loudly_without_falkordb(args):
     env = {**os.environ, "FALKORDB_PORT": str(_dead_port())}
-    p = subprocess.run([sys.executable, "-m", "app.cli", *args], cwd=ROOT, env=env, capture_output=True, text=True,
+    module = "app.agents.worker" if args[0] == "@worker" else "app.cli"
+    args = args[1:] if args[0] == "@worker" else args
+    p = subprocess.run([sys.executable, "-m", module, *args], cwd=ROOT, env=env, capture_output=True, text=True,
                        timeout=120)
     assert p.returncode == 2
     assert "FalkorDB is not reachable" in p.stderr

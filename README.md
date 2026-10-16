@@ -13,8 +13,10 @@ LeakTrace helps operators deal with leaks in water and coolant networks. Reports
 > - report and reading intake
 > - one full scenario (S1) from a leak alarm to a committed decision: suspects, flow checks for every plan, and how much the agent may do on its own
 > - carrying a decision out in practice mode: approval by a second person (or auto mode for low-risk plans), ordered valve moves picked up by a simulated field crew, a check against fresh meter readings, and undo
+> - six helpers (Intake, Investigator, Planner, Dispatcher, Checker, Record keeper) that hand work to each other only through task nodes in the graph
+> - jobs for people with step-by-step field confirmation, an emergency path, earned autonomy within a manager's ceiling, and an incident report
 >
-> All of this is tested against a live FalkorDB. No real equipment is connected: the valves, meters and field crew are simulated. Still to come: work orders, memory over time, the role-separated agent team, and the web app. This README only describes what runs.
+> All of this is tested against a live FalkorDB. No real equipment is connected: the valves, meters and field crew are simulated. The helpers can choose their tools with a language model, but **no model has been run with them yet**: every result in this README comes from the fixed rule-based chooser described below. Still to come: answers with sources (Ask LeakTrace), conversation history, and the web app. This README only describes what runs.
 
 Built for Graph Hacks 2026, Track 1: Agents That Act on Connected Data.
 
@@ -43,6 +45,14 @@ Carry the decision out, with a simulated field crew and plant (all through the R
 # other cases: stuck_v09, stuck_v07, worker_dies, graph_changes, approval_expires
 .venv/Scripts/python -m scenario_generator.run s5 --tenant demo --seed 7 --reset --execute auto
 # low-risk leak handled automatically; passing_valve: the check fails and the plan is undone
+```
+
+Let the six helpers do the work instead of the fixed investigation:
+
+```bash
+.venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --reset --helpers approve
+# also: s1 stuck_v09, s2 evidence, s5 auto, s5 passing_valve; --helper-process runs each helper round as a new process
+.venv/Scripts/python -m app.agents.worker --tenant demo --chooser rules   # run the helpers until no step is open
 ```
 
 Or run the API server and drive it over HTTP:
@@ -134,6 +144,64 @@ also: rejected, superseded (a newer plan, or the graph changed), approved -> pro
 
 The simulated plant (`scenario_generator/plant.py`) works out flows with its own model, independent of the app. The check compares the app's plan with readings from that separate model, not with the app's own prediction. The app never imports the simulator; it only sees what arrives over REST.
 
+## The helpers
+
+A new problem gets an Intake step, which is a `Task` node in the graph. Six helpers pick up steps of their kind, use their own tools, and hand on by creating the next `Task`. They are linked by `HANDED_OFF_TO`, so the hand-off chain is read straight from the graph.
+
+| Helper | Step | Tools | Hands on to |
+|---|---|---|---|
+| Intake | `triage` | look at the problem, suggested severity, set severity | Investigator |
+| Investigator | `investigate` | find suspects, check a suspect, trace impact, recall memory | Planner, or asks for evidence |
+| Planner | `plan` | read findings, list plans, test a plan (`algo.maxFlow`), commit | Dispatcher |
+| Dispatcher | `dispatch` | decision status, start the plan, create jobs, wait for approval | Checker or Record keeper |
+| Checker | `verify` | decision status, check the result, wait | Record keeper |
+| Record keeper | `record` | decision status, update the playbook, write the incident report | (done) |
+
+**Who chooses the tools.** A chooser picks each helper's next tool.
+
+- With a language model (`LEAKTRACE_AGENT_CHOOSER=llm` and an Anthropic API key), the model sees the helper's plain instructions, its tools and every earlier result, and must call exactly one tool per turn.
+- Without one, a fixed rule list per helper picks the tools. This is what all the tests and every number here use, and each step in the graph is labelled with the chooser that took it.
+
+**Authority stays in code, whatever the chooser picks:**
+
+- A helper can only call its own tools.
+- The Investigator cannot pass weak evidence on. It must trace the impact and check memory first.
+- The Planner cannot commit before testing every plan.
+- Starting a plan goes through the same execution engine as for people: a plan that needs approval is refused until a person approves it.
+- No helper can approve, reject, undo or change the auto-mode policy.
+- A helper that does not finish within 30 tool calls hands its step to people.
+
+Waiting steps wake up when their decision changes. That happens when a person approves, or when fresh readings arrive.
+
+S1, S2 and S5 produce different tool sequences: S2 asks for evidence and never lists plans; S5 starts on its own. Because the helpers keep nothing in memory, a helper process can be stopped and restarted at any time. In the restart test, every helper process ends after a valve was found stuck, and a new process handling a new leak recalls that fact. The new plan then avoids the valve.
+
+**Closing problems.** A verified fix closes the problem. A new problem opens only when a sensor goes into alarm. A sensor that stays wet does not reopen it.
+
+**When an automatic plan fails its check:**
+
+1. The valve it closed is recorded as possibly not sealing.
+2. The plan is undone.
+3. The problem is planned again, and the new plan always needs a person's OK.
+
+**Emergency path.** If a plan has waited for approval longer than the policy allows, with a leak alarm and live equipment near the water, the smallest plan that stops the leak may run without approval. It must also be the committed plan, and:
+
+- keep every critical rack supplied
+- be reversible, with no stuck valves
+- rest on enough confidence
+- run while auto mode is not paused
+
+It still goes through the stale-plan guard, and it always leaves a review item and a (simulated) notification. Otherwise it is refused and escalated.
+
+**Earned autonomy.** A plan that worked on the same pipe section at least 3 times, with no failure, may run automatically on equipment one step more critical than the usual limit. It never goes above the manager's ceiling. Every such widening is on the audit trail.
+
+**Jobs and the report.** The Dispatcher creates jobs from the plan:
+
+- an inspection for the field crew
+- moving or warning about jobs on racks that lose flow, for the owning team
+- agreeing a plan with people, when no plan passes
+
+The crew confirms each step and can report a valve that would not move; that becomes a fact for future plans. The Record keeper writes an incident report from the facts in the graph. The prose comes from a fixed template unless a language model is configured, and the report says which.
+
 ## Graph data model (current)
 
 One graph per customer, named `lt_<tenant>`. Login checks the account in that customer's graph. After that, every request works on the customer named in the signed token, never one named in the request or by a model. All demo data is synthetic and tagged `source: 'synthetic'`.
@@ -146,6 +214,7 @@ One graph per customer, named `lt_<tenant>`. Login checks the account in that cu
 | `AuthorityPolicy` | What helpers may do on their own: `min_confidence`, `max_auto_criticality`, `max_auto_operations`, `rate_limit_per_zone_per_hour`, `critical_min_criticality`, `frozen`, ... |
 | `Report`, `Incident`, `Option`, `Decision`, `Task`, `Episode`, `Fact` | Reports, problems, plans with their checks, committed decisions (`status`, `requested_by`, graph `fingerprint`), work steps (evidence checks and valve moves with lease and idempotency key), a record of every tool call, learned facts (for example a valve reported stuck) |
 | `Approval`, `Execution`, `Action`, `Verification`, `AuditEvent` | Who approved and until when; one run of a plan with the exact prior valve states; each valve change made; the check against fresh readings; one record per state change |
+| `Agent`, `WorkOrder`, `Playbook`, `Review`, `IncidentReport` | A helper (role, chooser, last process); a job for people with its steps and confirmations; a plan that worked before on a section, with success and failure counts; an item a manager must review; the incident report (facts and prose) |
 
 Every network node also has the label `Entity`, with an index on `id`.
 
@@ -158,6 +227,7 @@ Every network node also has the label `Entity`, with an index on `id`.
 | `ABOUT`, `PART_OF`, `INVOLVED` | A report is about things and part of a problem; a problem involves zones and assets |
 | `HAS_OPTION`, `DECIDED`, `CHOSE {role}`, `OPERATES`, `JUSTIFIED_BY` | A problem's plans and decision; the chosen and fallback plans; valves a plan moves; the evidence behind a decision |
 | `FOR`, `OF`, `SUPERSEDES` | A work step for a problem; an episode of a problem or an audit record of a decision; fact history, and a newer decision replacing an older one |
+| `HANDED_OFF_TO`, `CLAIMED_BY`, `ON`, `DERIVED_FROM` | One helper step passing work to the next; which helper took a step; what a job is about; a job or playbook coming from a decision |
 | `APPROVES`, `IMPLEMENTS`, `PART_OF`, `AUTHORIZED_BY`, `VERIFIES`, `EVIDENCED_BY` | Approval of a decision; an execution and its actions carry out a decision; valve-move steps and actions belong to an execution; an action is allowed by an approval or by the auto-mode policy; a check of a decision; a fact and the field report it came from |
 
 ## Key queries and algorithms
@@ -185,6 +255,11 @@ All query text lives in [`app/graph/queries/`](app/graph/queries/). Each query i
 | `move_done`, `move_failed` | Applies a reported move (valve state, link capacities, `Action`, next step) or stops the plan (and records a stuck valve as a fact), each in one atomic write | What the graph believes about each valve |
 | `flow_balance_for_segment`, `instruments_current`, `verification_write` | Readings after the moves, compared with the plan | Verified, or failed with the check that failed |
 | `rollback_start` | Undo steps, newest first, back to the recorded prior state | Restoring the network after a failed or unwanted plan |
+| `agent_task_claim`, `agent_task_finish`, `agent_tasks_wake` | A helper picks up a step; finishes it and creates the next ones; a waiting step wakes when its decision changes | The hand-off chain between helpers |
+| `break_glass_candidates` | Plans waiting for approval that the emergency path has not looked at | Whether to act without approval |
+| `playbook_get`, `playbook_record` | Successes and failures of a plan on a section | Earned autonomy |
+| `work_orders_create`, `work_order_confirm`, `work_order_complete`, `fact_write` | Jobs from a decision; field confirmation; a valve reported stuck becomes a fact | What people must do; what later plans avoid |
+| `incident_facts`, `incident_report_write` | Everything about one problem in one read | The incident report |
 
 **What-if for a plan.** A plan is written as a temporary capacity property `cap_<planId>` on every flow link:
 
@@ -226,6 +301,8 @@ Otherwise the decision needs approval, and lists the conditions that failed.
 
 `POST /auth/login` · `POST /assets/import` (manager) · `POST /reports` · `GET /reports/{code}` · `POST /readings` (meters account, field crew) · `GET /incidents` · `GET /incidents/{id}` · `POST /incidents/{id}/investigate` (operator, manager) · `GET /decisions/{id}` · `GET /agents/timeline?incident=`
 
+Problems, helpers, jobs and reports: `POST /incidents/{id}/close` (operator, manager) · `GET /incidents/{id}/helpers` · `GET|POST /incidents/{id}/report` · `GET /work-orders` · `POST /work-orders/{id}/take|confirm|complete` (field crew) · `GET /reviews`
+
 Carrying out a decision: `POST /decisions/{id}/approve` · `/reject` · `/execute` · `/verify` · `/rollback` · `/replan` (operator, manager) · `GET /decisions/{id}/status` · `GET /decisions/{id}/audit` · `POST /tasks/claim` · `POST /tasks/{id}/result` (field crew)
 
 The same steps from the command line, acting as a named user of one customer (that user's role decides what is allowed):
@@ -242,7 +319,7 @@ With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is c
 
 ## Tests
 
-`pytest -q` runs 163 tests against the live FalkorDB (about 3.5 minutes). They cover:
+`pytest -q` runs 204 tests against the live FalkorDB (about 2.5 minutes). They cover:
 
 - the docs max-flow example (13)
 - the what-if checks
@@ -261,7 +338,12 @@ With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is c
 - the stale-plan guard (valve state, criticality or a stuck-valve fact changed after approval)
 - undo restoring the exact prior state after a partial failure
 - S1 carried out on seeds 1-5 (verified every time) and every case in the table above
-- three FalkorDB behaviours the saved queries work around, pinned so a change is noticed
+- four FalkorDB behaviours the saved queries work around, pinned so a change is noticed
+- the helpers: the hand-off chain through task nodes, each helper using only its own tools, refusals coming from code when a scripted chooser tries forbidden things, S1/S2/S5 tool sequences differing, recall after every helper process is restarted
+- closing problems, a new alarm opening a new problem, the escalation after an automatic undo
+- the emergency path (acts after the wait; refuses when paused, unsure, starving a critical rack or stale) and earned autonomy (never above the manager's ceiling; the policy is unchanged by the helpers)
+- jobs with field confirmation, and the incident report
+- the language-model chooser's messages, with a fake client (no model is called in tests)
 
 `LEAKTRACE_KILLSWITCH_DOCKER=1 pytest tests/test_kill_switch.py` also stops the real container twice:
 
@@ -270,4 +352,4 @@ With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is c
 
 ## AI assistance
 
-This project is built with an AI coding assistant (Claude Code). The team directs the design, reviews the code, and checks every result against a running FalkorDB.
+This project is built with an AI coding assistant (Claude Code). Separately, the product's helpers can use a language model at run time to choose tools; that is optional, and every result in this README was produced without it. The team directs the design, reviews the code, and checks every result against a running FalkorDB.

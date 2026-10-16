@@ -34,7 +34,8 @@ def test_claim_race_exactly_one_winner_per_task(make_graph):
 
     def worker(name: str):
         # each worker has its own client connection, like separate agent processes
-        db = FalkorDB(host=config.FALKORDB_HOST, port=config.FALKORDB_PORT, password=config.FALKORDB_PASSWORD)
+        db = FalkorDB(host=config.FALKORDB_HOST, port=config.FALKORDB_PORT, password=config.FALKORDB_PASSWORD,
+                      socket_connect_timeout=config.FALKORDB_CONNECT_TIMEOUT_S)
         mine = TenantGraph(tg.tenant, db=db)
         barrier.wait()
         for t in task_ids:
