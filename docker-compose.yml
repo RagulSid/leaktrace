@@ -1,0 +1,18 @@
+services:
+  falkordb:
+    # Pinned by digest (falkordb/falkordb:latest as pulled on 2026-10-11) so every run uses the same build.
+    image: falkordb/falkordb@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
+    container_name: leaktrace-falkordb
+    ports:
+      - "${FALKORDB_PORT:-6380}:6379"
+      - "${FALKORDB_BROWSER_PORT:-3000}:3000"
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+volumes:
+  falkordb-data:
