@@ -2,6 +2,10 @@
 
 **When water or coolant goes where it should not, LeakTrace finds the likely leak, tests every valve plan on a FalkorDB graph, acts within strict limits or asks a person, checks the result, and remembers what happened.**
 
+- **Demo video:** https://youtu.be/au1HP8HGY68
+
+  [![LeakTrace demo video](https://img.youtube.com/vi/au1HP8HGY68/hqdefault.jpg)](https://youtu.be/au1HP8HGY68)
+
 - **How it works page** (in the app, no sign-in): live counts from FalkorDB, the saved searches behind one real problem, and a button that runs each one on the live map
 
 Everything here is practice data on a simulated data-hall cooling loop. No real equipment is connected; valves, meters and the field crew are simulated.
