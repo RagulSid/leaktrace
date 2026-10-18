@@ -26,6 +26,10 @@ def test_one_seed_scores_every_approach(tmp_path):
     # the stuck backup link: the graph hands it to people instead of stopping the leak by starving a key rack
     assert s[("S3", "graph")]["leak_stopped"] == 0 and s[("S3", "graph")]["key_rack_short_runs"] == 0
     assert ev["not_run"] and all(r["errors"] == 0 for r in ev["summary"])
+    # the sentences shown with the table come from these numbers
+    assert ev["notes"]["S5"].startswith("No difference")
+    assert "avoids starving the key rack and asks a person" in ev["notes"]["S3"]
+    assert "not LeakTrace's checks" in ev["approaches"]["flat"] and "own simulator" in ev["scored_by"]
 
 
 def test_how_it_works_reads_the_saved_file(tmp_path, monkeypatch):

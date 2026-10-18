@@ -47,12 +47,19 @@ export const copy = {
     "tooMany": "Too many tries. Wait a minute and try again.",
     "notFound": "We couldn't find that."
   },
+  "wake": {
+    "title": "Waking up the practice map",
+    "text": "It sleeps when nobody has used it for a while. Starting again can take up to a minute.",
+    "still": "Still starting…",
+    "gaveUp": "The map did not wake up. Try again in a few minutes."
+  },
   "login": {
     "title": "Sign in",
     "lead": "Staff sign-in for the practice data hall.",
     "user": "Name",
     "password": "Password",
     "accounts": "Practice accounts: operator1, operator2, manager1, tech1, tech2, staff1, safety1.",
+    "judges": "Trying it out? Sign in as {accounts} with the shared practice password: {password}. Everything here is practice data and is reset from time to time. The manager account is private.",
     "submit": "Sign in"
   },
   "report": {
@@ -247,6 +254,10 @@ export const copy = {
     "isOn": "Auto mode is ON",
     "isPaused": "Auto mode is PAUSED",
     "pauseNote": "When paused, everything needs a person's OK at once.",
+    "resetTitle": "Practice data",
+    "resetNote": "Put the practice problems back as they were at the start. Takes about a minute; everyone sees \"waking up\" until it is done.",
+    "resetButton": "Reset practice data",
+    "resetConfirm": "Reset all practice data now? Everything people did here is wiped.",
     "pause": "Pause auto mode",
     "resume": "Turn auto mode back on",
     "mayDo": "What helpers may do on their own",
@@ -497,7 +508,9 @@ export const copy = {
     },
     "versus": "Why a map and not a table",
     "notMeasured": "Not measured yet. The comparison with flat tables has not been run, so no numbers are shown.",
-    "versusLead": "The same cases decided four ways, each scored by the same simulated plant (practice data). Measured {when}, {seeds} seeds per case, {secs} s. A plan that needs a person's OK is scored as if approved.",
+    "versusLead": "The same cases decided four ways. Scored in our own simulator on practice data, not on real equipment: {seeds} seeds per case, run {when}, {secs} s. A plan that needs a person's OK is scored as if approved.",
+    "versusShows": "What the numbers show",
+    "versusArms": "What each arm is",
     "versusCols": { "case": "Case", "approach": "Approach", "stopped": "Leak stopped", "keyShort": "Runs with a key rack short", "short": "Racks short (average)", "moves": "Valve moves (average)", "asked": "Asked a person", "lookups": "Searches or lookups (average)", "maxflow": "Max flow runs (average)" },
     "versusRuns": "{n} of {runs}",
     "versusNotRun": "Not run: {what}",
@@ -531,19 +544,20 @@ export const copy = {
     "fail": "Fail",
     "helpersTitle": "What helpers may do on their own",
     "helpersList": [
-      "Read, group, plan and draft at any time.",
+      "Read, group, plan and write reports at any time.",
       "Act alone only inside the limits a manager sets: how sure, how important, how many steps.",
       "Ask a person for an OK otherwise.",
       "Never decide evacuations or public shut-offs.",
       "Can be paused at any time with one switch.",
-      "Every action can be undone and is logged."
+      "Every valve move is logged, and a plan can be undone to the exact settings before it."
     ],
     "codeTitle": "Where to look in the code",
     "codePaths": [
       "app/graph/queries/ (every search)",
       "app/domain/authority.py (who may act)",
       "app/agents/ (the helpers)",
-      "app/mcp_server/ (the tools helpers use)",
+      "app/agents/roles.py (each helper's own tools)",
+      "app/mcp_server/ (read-only tools for outside agents)",
       "scenario_generator/ (practice data)",
       "tests/ (the checks)"
     ],

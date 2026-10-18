@@ -23,6 +23,9 @@ PASSWORD = "practice-only-password"
 def demo(monkeypatch):
     t = fresh_tenant()
     run("s1", t, seed=2, reset=True, password=PASSWORD)
+    from app.cli import mark_practice_ready
+
+    mark_practice_ready(TenantGraph(t))
     monkeypatch.setattr(config, "DEMO_TENANT", t)
     yield t, TestClient(app)
     TenantGraph(t).delete()
@@ -98,3 +101,23 @@ def test_not_reachable_names_host_port_and_graph(monkeypatch, caplog):
 def test_graph_unavailable_carries_where(monkeypatch):
     e = GraphUnavailable("x", reason="graph_empty", graph="lt_x")
     assert e.where() == {"reason": "graph_empty", "host": config.FALKORDB_HOST, "port": config.FALKORDB_PORT, "graph": "lt_x"}
+
+
+def test_health_waits_for_the_end_of_the_practice_seed(monkeypatch):
+    """Accounts and map alone are not enough: the screens keep saying "waking up" until the practice story is done."""
+    from app.cli import bootstrap, mark_practice_ready
+    from app.graph.importer import import_pack, load_pack
+    from tests.conftest import DATACENTER_PACK
+
+    t = fresh_tenant()
+    try:
+        bootstrap(t, password=PASSWORD)
+        import_pack(TenantGraph(t), load_pack(str(DATACENTER_PACK)))
+        monkeypatch.setattr(config, "DEMO_TENANT", t)
+        c = TestClient(app)
+        assert c.get("/health").json() == {"falkordb_reachable": True, "demo_seeded": False}
+        mark_practice_ready(TenantGraph(t))
+        assert c.get("/health").status_code == 200
+    finally:
+        TenantGraph(t).delete()
+

@@ -24,8 +24,9 @@ SIZES = {"phone": {"width": 390, "height": 844}, "desktop": {"width": 1440, "hei
 
 def token(base: str, user: str) -> dict:
     tenant = httpx.get(f"{base}/public/info").json()["demo_tenant"]
+    pw = os.environ.get("LEAKTRACE_MANAGER_PASSWORD") if user in ("manager1", "meters1") else None
     r = httpx.post(f"{base}/auth/login", json={"tenant": tenant, "username": user,
-                                               "password": os.environ["LEAKTRACE_DEMO_PASSWORD"]})
+                                               "password": pw or os.environ["LEAKTRACE_DEMO_PASSWORD"]})
     r.raise_for_status()
     out = r.json()
     return {"token": out["token"], "who": {"user": user, "role": out["role"], "tenant": out["tenant"]}}

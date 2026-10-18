@@ -1,7 +1,9 @@
 services:
+  # FalkorDB alone, for development (the API runs on the host). `docker compose up -d`
   falkordb:
-    # Pinned by digest (falkordb/falkordb:latest as pulled on 2026-10-11) so every run uses the same build.
-    image: falkordb/falkordb@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
+    # FalkorDB 6.0.2, pinned by tag and digest: the exact image every result here was produced with
+    # (graph module version 60002, image built 2026-10-08). The digest makes the pin exact.
+    image: falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
     container_name: leaktrace-falkordb
     # A FalkorDB panic exits the whole server; come back on its own, and keep an append-only file so a
     # crash loses at most about a second of writes instead of everything since the last snapshot.
@@ -19,5 +21,27 @@ services:
       timeout: 2s
       retries: 30
 
+  # Everything in one container (FalkorDB, API, helpers, web app), as deployed.
+  # `docker compose --profile app up -d --build`, then open http://localhost:8080/
+  # The passwords and secret come from .env. No model settings are passed, so the fixed rules choose the steps.
+  app:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: leaktrace:local
+    container_name: leaktrace-app
+    restart: unless-stopped
+    environment:
+      LEAKTRACE_SECRET: ${LEAKTRACE_SECRET:?set LEAKTRACE_SECRET in .env}
+      LEAKTRACE_DEMO_PASSWORD: ${LEAKTRACE_DEMO_PASSWORD:?set LEAKTRACE_DEMO_PASSWORD in .env}
+      LEAKTRACE_MANAGER_PASSWORD: ${LEAKTRACE_MANAGER_PASSWORD:?set LEAKTRACE_MANAGER_PASSWORD in .env}
+      FALKORDB_PERSIST: "1"
+    ports:
+      - "${APP_PORT:-8080}:8000"
+    volumes:
+      - leaktrace-app-data:/data
+
 volumes:
   falkordb-data:
+  leaktrace-app-data:

@@ -1,481 +1,295 @@
 # LeakTrace
 
-LeakTrace helps operators deal with leaks in water and coolant networks. Reports and meter readings go into a FalkorDB graph. Agents then use graph queries and graph algorithms to:
+**When water or coolant goes where it should not, LeakTrace finds the likely leak, tests every valve plan on a FalkorDB graph, acts within strict limits or asks a person, checks the result, and remembers what happened.**
 
-- find the likely cause and what is affected
-- test each valve plan for whether critical equipment still gets enough flow
-- commit to one plan, then act within strict limits or ask a person for approval
+- **How it works page** (in the app, no sign-in): live counts from FalkorDB, the saved searches behind one real problem, and a button that runs each one on the live map
 
-> **Status: work in progress.** What runs today:
->
-> - the graph model and a synthetic data-centre cooling network
-> - a REST API with logins, where the customer is bound to the login token
-> - report and reading intake
-> - one full scenario (S1) from a leak alarm to a committed decision: suspects, flow checks for every plan, and how much the agent may do on its own
-> - carrying a decision out in practice mode: approval by a second person (or auto mode for low-risk plans), ordered valve moves picked up by a simulated field crew, a check against fresh meter readings, and undo
-> - six helpers (Intake, Investigator, Planner, Dispatcher, Checker, Record keeper) that hand work to each other only through task nodes in the graph
-> - jobs for people with step-by-step field confirmation, an emergency path, earned autonomy within a manager's ceiling, and an incident report
->
-> All of this is tested against a live FalkorDB. No real equipment is connected: the valves, meters and field crew are simulated. The helpers can choose their tools with a language model, but **no model has been run with them yet**: every result in this README comes from the fixed rule-based chooser described below. Still to come: answers with sources (Ask LeakTrace), conversation history, and the web app. This README only describes what runs.
+Everything here is practice data on a simulated data-hall cooling loop. No real equipment is connected; valves, meters and the field crew are simulated.
 
-Built for Graph Hacks 2026, Track 1: Agents That Act on Connected Data.
+## The problem
 
-## Run locally
+In a liquid-cooled data hall, a leak is usually noticed first by a sensor or a person. The explanation is spread across meters, the pipe map, maintenance history and reports. Closing the nearest valve can cut cooling to a rack that must keep running; doing nothing lets the water spread near live power. Operators work this out by hand, under time pressure.
 
-From a fresh terminal (Windows PowerShell), in the project folder. FalkorDB listens on **localhost:6380**.
+## What LeakTrace does
 
-```powershell
-docker compose up -d                                   # 1. start FalkorDB (port 6380; its browser UI is on http://localhost:3000)
-.\.venv\Scripts\Activate.ps1                          # 2. activate the Python environment (every new terminal)
-python -m scenario_generator.demo --tenant demo        # 3. seed the demo customer with practice problems (resets it)
-cd web; npm install; npm run build; cd ..              # 4. build the web app (again only after web/ changes)
-python -m uvicorn app.api.main:app --port 8000         # 5. start the server, then open http://localhost:8000/
-```
+1. **Takes in** sensor readings and reports in plain words ("water under Rack A1 in Row A") and links them to the map.
+2. **Finds the likely leak** and how sure it is, from independent signs (leak alarm, pressure drop downstream, missing water between meters, reports).
+3. **Traces what is affected** several links away: racks, the jobs running on them, the teams that own those jobs, live power nearby.
+4. **Tests every valve plan** with FalkorDB's max-flow algorithm: does the leak get no water, and does every rack that must keep running still get enough?
+5. **Commits to one plan** and decides how much it may do alone: handled automatically (low risk, every condition met), needs a person's OK (and says why), or people decide.
+6. **Carries it out** through a simulated field crew in a safe order, **checks** fresh readings, and **undoes** it if the check fails.
+7. **Remembers**: a valve that would not move, a fix that worked, who did what. The next plan changes because of it.
+8. **Answers questions with sources** (Ask LeakTrace): "Why did we avoid valve V-09?" comes back with the maintenance ticket, the thing we know and the procedure, or "I don't know".
 
-Sign in with `operator1` (open problems, approve plans), `manager1` (auto mode settings), `tech1` (field crew jobs), `staff1`, `operator2` or `safety1`. The password for all of them is the value of `LEAKTRACE_DEMO_PASSWORD` in your `.env`. "Report a problem", "Track my report" and "How it works" need no sign-in.
+## Why a graph
 
-**First time only**, before step 1:
+**Stop FalkorDB and LeakTrace has nothing to say.** Every route answers `503` with the reason (`not_reachable` or `graph_empty`), the command line exits with code 2, and the How it works page shows an error and no numbers. Nothing is cached (tests: `tests/test_kill_switch.py`, `tests/test_health.py`, `tests/test_how_it_works.py`; with `LEAKTRACE_KILLSWITCH_DOCKER=1` the same file stops the real container in the middle of carrying out a plan).
 
-```powershell
-py -3.12 -m venv .venv                                 # Python 3.11+ works
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-copy .env.example .env                                 # then set LEAKTRACE_DEMO_PASSWORD (and LEAKTRACE_SECRET) in .env
-```
+**The same cases decided four ways, scored in our own simulator on practice data** (`python -m scenario_generator.evaluate --seeds 5`; the simulator `scenario_generator/plant.py` knows nothing about the app). Each arm sees the same evidence, the alarmed leak sensor and its pipe section:
 
-`LEAKTRACE_SECRET` signs the login tokens. Without it a new secret is made each time the server starts, and everyone has to sign in again after a restart.
+- **graph**: LeakTrace through its API: likely causes, what is affected several links away, every plan tested with max flow against its checks, what it remembers, and the auto-mode limits
+- **flat**: a fixed rule on flat tables, not LeakTrace's checks: close the valves next to the suspected section, count only racks fed directly by it, skip a valve with an open failed-to-operate ticket; one lookup per table, no paths, no max flow
+- **B1**: close the nearest valve upstream of the suspected section
+- **B2**: isolate the whole loop (close every open valve)
 
-On macOS or Linux, activate with `source .venv/bin/activate`. Everything else is the same. In Git Bash on Windows, use `source .venv/Scripts/activate`.
-
-Two common errors:
-- `No module named 'falkordb'`: the environment is not active, so step 2 was skipped. Run step 2, or call `.venv\Scripts\python -m ...` directly.
-- `Missing argument 'APP'`: uvicorn needs the app path, `app.api.main:app`, as in step 5.
-
-### Troubleshooting
-
-- "Can't reach the map right now": open `http://localhost:8000/health`. `falkordb_reachable: false` means FalkorDB is not running: `docker compose up -d` (and `docker logs leaktrace-falkordb` says why it stopped). `demo_seeded: false` means the demo customer's map is empty: run step 3 again. The server log and the screen's Details drawer name the host, port and graph.
-
-## Setup (local)
-
-Requirements: Docker, Python 3.11+.
-
-```bash
-cp .env.example .env              # FalkorDB on host port 6380; set LEAKTRACE_SECRET and LEAKTRACE_DEMO_PASSWORD
-docker compose up -d              # FalkorDB (pinned image) + browser UI on http://localhost:3000
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt      # Windows; on macOS/Linux use .venv/bin/...
-.venv/Scripts/python -m pytest -q                  # needs FalkorDB running (~80 s)
-```
-
-Run scenario S1 end to end. It resets the `demo` customer, creates synthetic demo accounts, then sends every step through the REST API:
-
-```bash
-.venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --reset
-```
-
-Carry the decision out, with a simulated field crew and plant (all through the REST API):
-
-```bash
-.venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --reset --execute happy
-# other cases: stuck_v09, stuck_v07, worker_dies, graph_changes, approval_expires
-.venv/Scripts/python -m scenario_generator.run s5 --tenant demo --seed 7 --reset --execute auto
-# low-risk leak handled automatically; passing_valve: the check fails and the plan is undone
-```
-
-Let the six helpers do the work instead of the fixed investigation:
-
-```bash
-.venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --reset --helpers approve
-# also: s1 stuck_v09, s2 evidence, s5 auto, s5 passing_valve; --helper-process runs each helper round as a new process
-.venv/Scripts/python -m app.agents.worker --tenant demo --chooser rules   # run the helpers until no step is open
-```
-
-Or run the API server and drive it over HTTP:
-
-```bash
-.venv/Scripts/python -m app.cli bootstrap --tenant demo --reset      # demo accounts, password from LEAKTRACE_DEMO_PASSWORD
-.venv/Scripts/python -m uvicorn app.api.main:app --port 8000
-.venv/Scripts/python -m scenario_generator.run s1 --tenant demo --seed 7 --base-url http://localhost:8000 --import-pack
-```
-
-To start fresh in one container, `deploy/start.sh` does the following. It runs FalkorDB on localhost only, in memory. It seeds the demo customer if the graph is empty (`python -m app.cli ensure-demo`; this needs `LEAKTRACE_DEMO_PASSWORD`). It keeps the helpers running (`python -m app.agents.worker --loop 5`) and serves the API. `deploy/Dockerfile` is a draft single image built on the same pinned FalkorDB image. Nothing is deployed yet.
-
-The agent tool server (MCP, stdio) for one customer: `LEAKTRACE_TENANT=demo python -m app.mcp_server.server`.
-
-## What happens in scenario S1
-
-All data is synthetic. A leak starts on the row A branch pipe (`SEG-A1`). Then:
-
-1. The leak sensor alarms and pressure drops at manifold A.
-2. The row A inflow meter reads high by the leak amount.
-3. A staff member reports "water dripping under Rack A1 in Row A".
-
-The report text is matched against names and ids in the graph. It links to Rack A1 and Row A and joins the open problem in that zone.
-
-The investigation then runs these steps. Each one is a graph query or algorithm, and each call is recorded in the graph:
-
-| Step | Graph work | Result on the demo network |
-|---|---|---|
-| Find suspects | `q1_find_suspects` | SEG-A1 first: alarm on the pipe, pressure drop downstream |
-| How sure are we | `segment_signals`, `reports_near_segment`, `flow_balance_for_segment` | 0.90 (high): leak alarm 0.35 + pressure drop 0.20 + meter imbalance 0.25 + report 0.10 |
-| What is affected | `q2_trace_impact`, `q3_exposure`, `evidence_path` | Racks A1 (critical) and A2, their jobs and owning teams; powered equipment near the water |
-| What we remember | `q4_recall_incidents` | Past problems and active facts on the same equipment |
-| Possible plans | `boundary_valves`, `closed_valves` | Close any of V-01 / V-07, optionally open backup link V-09, or do nothing (7 plans) |
-| Test each plan | `algo.maxFlow` under a temporary capacity per plan | See below |
-| May it act alone? | `policy_for_zone`, `asset_flags`, `actions_recent_in_zone` | Needs approval (L3), with the reasons |
-| Commit | `options_write`, `decision_write`, `decision_justify` | `Decision` linked to every plan, the chosen plan and its evidence |
-
-Plan results (computed by `algo.maxFlow`; the numbers are checked by hand in `tests/test_s1_end_to_end.py`):
-
-| Plan | Fails | Why |
-|---|---|---|
-| **Close V-01 + V-07, open V-09** | nothing (chosen) | Leak gets 0. Rack A1 and Rack B1 each get 20 (they need 20). The less critical racks share the rest, so their jobs are moved |
-| Do nothing | leak cut off, live equipment near water | The leak keeps flowing |
-| Close V-01, open V-09 | leak cut off | Water flows backwards through V-07 into the leak (40) |
-| Close V-01 | critical rack supplied | Rack A1 gets 0 and its training job cannot move |
-| Close V-01 + V-07 | critical rack supplied | Rack A1 gets 0 |
-
-**Why it asks for approval:** two of the eight auto-mode conditions fail. Rack A1 (criticality 5) is above the policy ceiling of 3, and the plan needs 3 valve moves where the policy allows 2. For a low-risk leak (the pipe feeding Rack A2), the same engine chooses "close V-04" and all eight conditions pass (handled automatically). If a manager pauses auto mode, that case needs approval instead. All of this is tested.
-
-**Weak evidence never leads to action.** Any of the following results in a request for an on-site check, with no plans tested:
-
-- one alarm on its own
-- one pressure drop on its own
-- a report while the meters show balanced flow
-
-## Carrying out a decision (practice mode)
-
-A committed plan moves through these states. Each change is one conditional write in FalkorDB, together with an `AuditEvent` saying who did it, in which role, from which state to which, and why. If the write fails part-way, none of it is applied.
-
-```
-proposed -> approved -> executing -> verifying -> verified
-                                  \-> failed      \-> failed
-failed | verified -> rolling_back -> rolled_back (or rollback_failed)
-also: rejected, superseded (a newer plan, or the graph changed), approved -> proposed (approval expired)
-```
-
-- **Who approves.** A plan that needs approval (L3) must be approved by an operator or manager, and not by the person who asked for it. Approvals expire after 30 minutes by default. A low-risk plan (L2) is approved by auto mode at the moment it runs. If a manager has paused auto mode by then, the plan needs a person's OK instead. A "people decide" plan (L4) is never executed.
-- **Is the plan still valid?** The decision stores a snapshot and fingerprint of the graph it was computed on: valve states, criticality, link capacities, active facts, policy limits, sensor states and meter readings. Before anything moves, the snapshot is read again. If anything changed materially, execution is refused, the old plan is marked superseded, and a new plan is made that needs its own approval.
-- **Valve moves.** Each move is a `Task` that a field crew member picks up with a lease (`POST /tasks/claim`) and reports on (`POST /tasks/{id}/result`).
-  - Order: valves that open go first, then the ones that close. In S1 that is open V-09, close V-01, close V-07, so rack A1 never loses its supply.
-  - Commands are absolute ("V-01 closed") and carry an idempotency key, so a retry never moves a valve twice.
-  - If a worker disappears, the lease runs out and someone else finishes the step.
-  - If a valve does not move, the plan stops. Undo or a new plan is offered, and the stuck valve is recorded as a fact so the new plan avoids it.
-- **Checking the result.** After the last move, readings that arrived later are compared with what the plan expected:
-  - the inflow meter on the leaking pipe reads 0 (at most 2)
-  - each critical rack's meter still reads its required flow, within the tolerance
-  - pressure is back to normal
-  - the metered region around the pipe balances again
-- **Undo.** Every move that was applied is reversed, newest first, back to the exact valve states and link capacities recorded when the plan started. A low-risk plan whose check fails is undone automatically.
-
-| Case (`--execute`) | What happens |
-|---|---|
-| `happy` | Approved by a second operator; 3 moves; check passes: verified |
-| `stuck_v09` | The backup valve does not open: stops at step 1, nothing to undo; the new plan cannot use V-09 and asks people to decide |
-| `stuck_v07` | Two moves done, then V-07 does not close: both moves undone, every valve and link back exactly as before |
-| `worker_dies` | A crew member moves a valve and vanishes; the lease runs out; a second crew member finishes; still 3 physical moves |
-| `graph_changes` | The leak grows after approval: execution refused as stale, a new plan is made, approved and verified |
-| `approval_expires` | The approval runs out before execution: back to proposed, approved again, verified |
-| S5 `auto` | Low-risk leak: handled automatically, no person involved, verified |
-| S5 `passing_valve` | The valve says it closed, but the meters show water still flowing: the check fails and the plan is undone automatically |
-
-The simulated plant (`scenario_generator/plant.py`) works out flows with its own model, independent of the app. The check compares the app's plan with readings from that separate model, not with the app's own prediction. The app never imports the simulator; it only sees what arrives over REST.
-
-## The helpers
-
-A new problem gets an Intake step, which is a `Task` node in the graph. Six helpers pick up steps of their kind, use their own tools, and hand on by creating the next `Task`. They are linked by `HANDED_OFF_TO`, so the hand-off chain is read straight from the graph.
-
-| Helper | Step | Tools | Hands on to |
-|---|---|---|---|
-| Intake | `triage` | look at the problem, suggested severity, set severity | Investigator |
-| Investigator | `investigate` | find suspects, check a suspect, trace impact, recall memory | Planner, or asks for evidence |
-| Planner | `plan` | read findings, list plans, test a plan (`algo.maxFlow`), commit | Dispatcher |
-| Dispatcher | `dispatch` | decision status, start the plan, create jobs, wait for approval | Checker or Record keeper |
-| Checker | `verify` | decision status, check the result, wait | Record keeper |
-| Record keeper | `record` | decision status, update the playbook, write the incident report | (done) |
-
-**Who chooses the tools.** A chooser picks each helper's next tool.
-
-- With a language model, the model sees the helper's plain instructions, its tools and every earlier result, and calls one tool per turn. Any OpenAI-compatible chat API works. Set `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` in `.env`; the code uses no vendor SDK. If the model times out, hits a rate limit (HTTP 429), returns something unusable, or the run reaches its call cap (60 by default), the rule list takes over. Every step records which one actually chose it (`rules` or the model's name), and why the rules stood in.
-- Without one, a fixed rule list per helper picks the tools. This is what all the tests and every number here use, and each step in the graph is labelled with the chooser that took it.
-
-**Authority stays in code, whatever the chooser picks:**
-
-- A helper can only call its own tools.
-- The Investigator cannot pass weak evidence on. It must trace the impact and check memory first.
-- The Planner cannot commit before testing every plan.
-- Starting a plan goes through the same execution engine as for people: a plan that needs approval is refused until a person approves it.
-- No helper can approve, reject, undo or change the auto-mode policy.
-- A helper that does not finish within 30 tool calls hands its step to people.
-
-Waiting steps wake up when their decision changes. That happens when a person approves, or when fresh readings arrive.
-
-S1, S2 and S5 produce different tool sequences: S2 asks for evidence and never lists plans; S5 starts on its own. Because the helpers keep nothing in memory, a helper process can be stopped and restarted at any time. In the restart test, every helper process ends after a valve was found stuck, and a new process handling a new leak recalls that fact. The new plan then avoids the valve.
-
-**Closing problems.** A verified fix closes the problem. A new problem opens only when a sensor goes into alarm. A sensor that stays wet does not reopen it.
-
-**When an automatic plan fails its check:**
-
-1. The valve it closed is recorded as possibly not sealing.
-2. The plan is undone.
-3. The problem is planned again, and the new plan always needs a person's OK.
-
-**Emergency path.** If a plan has waited for approval longer than the policy allows, with a leak alarm and live equipment near the water, the smallest plan that stops the leak may run without approval. It must also be the committed plan, and:
-
-- keep every critical rack supplied
-- be reversible, with no stuck valves
-- rest on enough confidence
-- run while auto mode is not paused
-
-It still goes through the stale-plan guard, and it always leaves a review item and a (simulated) notification. Otherwise it is refused and escalated.
-
-**Earned autonomy.** A plan that worked on the same pipe section at least 3 times, with no failure, may run automatically on equipment one step more critical than the usual limit. It never goes above the manager's ceiling. Every such widening is on the audit trail.
-
-**Jobs and the report.** The Dispatcher creates jobs from the plan:
-
-- an inspection for the field crew
-- moving or warning about jobs on racks that lose flow, for the owning team
-- agreeing a plan with people, when no plan passes
-
-The crew confirms each step and can report a valve that would not move; that becomes a fact for future plans. The Record keeper writes an incident report from the facts in the graph. The prose comes from a fixed template unless a language model is configured and answers. The report names which one wrote it.
-
-## The web app
-
-Six screens, in plain words, in a white hairline style. Every word is in `web/src/copy.ts` and every colour in `web/src/theme.css`. The API returns codes, and the screens turn them into words. "Practice mode" shows on every screen.
-
-| Screen | Who | What it shows |
-|---|---|---|
-| Report a problem, Track my report | anyone, no sign-in | A short form, then a code and five plain stages ("Received" to "Fixed and checked"), plus "I see this too". No internal ids leave the server |
-| Open problems | operator, manager, safety officer | Queue with word badges. How sure we are. The map with the "why we think so" path, what's affected and the valves the plan moves. Every plan tested, with Pass or Fail per check. The recommended plan, the reasons it needs approval, Approve and run, Don't approve, the valve steps, the check result and undo |
-| My jobs | field crew | Valve steps to pick up, mark done, or report "it won't move" (that becomes something we know for later plans). Field jobs with step-by-step confirmation |
-| Auto mode | manager (others read only) | What helpers may do on their own (bounded, every change audited), pause switch, what helpers did on their own, things to review (including names in documents that match nothing on the map), what we've learned (a record replaced by a newer one is marked, and cannot be confirmed back), proven fixes |
-| Who did what | operator, manager | The hand-off chain read from the graph, and each helper step in plain words. Every step says whether the fixed rules or a model chose it, exactly as recorded. Ask LeakTrace beside it: questions answered from the map with their sources, or "I don't know" with an offer to send the field crew to find out. The conversation is saved per person and problem |
-| How it works | anyone | Live counts from FalkorDB and the shape of the map. Six steps of one real problem, each with its saved read-only search, parameters, plan and cost, and a button that runs it on the live map. Feature call counts, the slowest searches, and the checks the test run saved. With FalkorDB stopped it shows an error and no numbers |
-
-```bash
-cd web && npm install && npm run build      # the API then serves the app at http://localhost:8000/
-npm run dev                                 # or: development server on :5173, forwarding API calls to :8000
-python -m scenario_generator.demo --tenant demo   # practice problems for the screens (needs LEAKTRACE_DEMO_PASSWORD)
-```
-
-## Ask LeakTrace (answers with sources)
-
-The company's documents, maintenance tickets and shift chats live in the same graph as the map, so an answer can follow links from a valve to the ticket about it, the thing we know because of that ticket, the decision that avoided the valve, and the procedure that names it.
-
-**Reading them in** (`POST /brain/ingest`, managers; `app/brain/ingest.py`). No language model is involved:
-- each text is resolved against the map by exact id (`V-09`, `TCK-1042`) or exact name ("Backup link valve") into `MENTIONS` links
-- a word that looks like a map id but matches nothing (for example `V-11`) becomes a review item for a manager instead of entering the map
-- each paragraph, ticket and message becomes a `Chunk` with a passage vector in FalkorDB's vector index. The vectors are hashed word counts computed locally (no model, no network), so meaning search finds passages that share the question's words, not passages that say the same thing differently
-- the Record keeper's rule for tickets: a "failed to operate" ticket becomes an active `stuck` fact about the valve, evidenced by the ticket, so every later plan that moves that valve fails its "can be done" check; a repair ticket adds a `working` fact that `SUPERSEDES` the stuck one (kept, never deleted)
-- who knows what (`EXPERT_IN {score, basis, last}`) is recomputed from the tickets each person did
-
-**Answering** (`POST /brain/ask`; `app/brain/ask.py`):
-1. find the ids and names in the question
-2. pick a saved search by the question's words: why a valve was avoided (decision record, failed check, fact, ticket, procedure), who owns it (`OWNS`, also through the jobs on a rack), who knows it (`EXPERT_IN`), what we know about it (facts with what replaced what, tickets, documents), otherwise passages from the vector index that share at least two words with the question
-3. word the answer with fixed sentences, each claim followed by its `[id]`. If a model is set up (`LLM_*`), it may reword them, keeping the ids
-4. check every citation in code: each `[id]` must exist on this customer's map and be among the search results, and there must be at least one. Otherwise the answer is "I don't know", with an offer to send the field crew a "find out" job
-
-Every question and answer is saved as `Message` nodes in a `Conversation` per person and problem, so the conversation resumes after a restart.
-
-**Practice corpus** (`scenario_generator/docs_corpus/`, all invented): 6 documents (2 procedures, a runbook, a vendor note for a fictional vendor, a maintenance schedule, an ownership chart), 10 tickets, 20 shift-chat messages, 6 people in 3 teams, and one update (repair ticket `TCK-1077`).
-
-```bash
-python -m scenario_generator.knowledge --tenant s9demo --reset   # corpus, an S1 leak, questions, then the update
-```
-
-What it gives on this map (also checked by `tests/test_ask_leaktrace.py`): "Why did we avoid valve V-09?" answers that V-09 does not move, citing the thing we know `F-TCK-1042`, the ticket `TCK-1042`, the decision that handed the choice to people, and the procedures `SOP-ISO-01` and `SOP-XC-02`. After the repair ticket, "What do we know about V-09?" says the earlier record no longer holds and cites `TCK-1077`, and planning the same problem again picks the rescue plan through V-09 (it needs a person's OK). "What is the capital of France?" gets "I don't know".
-
-## Graph vs flat tables (measured)
-
-`python -m scenario_generator.evaluate --seeds 5` decides the same cases four ways and scores every plan with the same simulated plant (`scenario_generator/plant.py`, which knows nothing about the app):
-- **graph**: LeakTrace itself, through its API (multi-hop searches, max flow per plan, memory, authority). A plan that needs a person's OK is scored as if approved
-- **flat**: the graph tools replaced by flat tables: one lookup per table, no paths, no max flow. It closes the valves next to the suspected section, counts as affected only racks fed directly by it, and reads the ticket table for the valves it closes
-- **B1**: close the nearest valve upstream. **B2**: isolate the whole loop
-- not run: a language model with flat tables (no model key was set)
-
-Cases: S1 (leak on the Row A branch pipe), S5 (small leak on the Rack A2 feed), S3 (S1 with the backup link valve V-09 known stuck from a ticket and really stuck in the plant). Key racks are criticality 5 (Rack A1, Rack B1). Run 2026-10-16T07:25:54Z, 5 seeds per case, 24.0 s, Windows 11, Python 3.12.8, FalkorDB at 127.0.0.1:6380:
-
-| Case | Approach | Leak stopped | Runs with a key rack short | Racks short (avg) | Valve moves (avg) | Asked a person | Searches or lookups (avg) | Max flow runs (avg) |
+| Case | Arm | Leak stopped | Runs with a key rack short | Racks short (avg) | Valve moves (avg) | Asked a person | Searches or lookups (avg) | Max-flow runs (avg) |
 |---|---|---|---|---|---|---|---|---|
-| S1 | graph | 5 of 5 | 0 of 5 | 2.0 | 3.0 | 5 of 5 | 141.0 | 49.0 |
-| S1 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5.0 | 0.0 |
-| S1 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
-| S1 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
-| S5 | graph | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 118.0 | 21.0 |
-| S5 | flat | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 5.0 | 0.0 |
-| S5 | B1 | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
-| S5 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
-| S3 | graph | 0 of 5 | 0 of 5 | 0.2 | 0.0 | 5 of 5 | 136.0 | 49.0 |
-| S3 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5.0 | 0.0 |
-| S3 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2.0 | 0.0 |
-| S3 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1.0 | 0.0 |
+| S1 | graph | 5 of 5 | 0 of 5 | 2.0 | 3.0 | 5 of 5 | 141 | 49 |
+| S1 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5 | 0 |
+| S1 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2 | 0 |
+| S1 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1 | 0 |
+| S5 | graph | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 118 | 21 |
+| S5 | flat | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 5 | 0 |
+| S5 | B1 | 5 of 5 | 0 of 5 | 1.0 | 1.0 | 0 of 5 | 2 | 0 |
+| S5 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1 | 0 |
+| S3 | graph | 0 of 5 | 0 of 5 | 0.2 | 0.0 | 5 of 5 | 136 | 49 |
+| S3 | flat | 5 of 5 | 5 of 5 | 2.0 | 2.0 | 0 of 5 | 5 | 0 |
+| S3 | B1 | 5 of 5 | 5 of 5 | 2.0 | 1.0 | 0 of 5 | 2 | 0 |
+| S3 | B2 | 5 of 5 | 5 of 5 | 4.0 | 8.0 | 0 of 5 | 1 | 0 |
 
-What this shows, and no more: on S1 the graph plan stops the leak and keeps both key racks supplied by opening the backup link, while the flat and nearest-valve plans leave Rack A1 without water in every run (they cannot see two hops downstream). On S5 there is no difference between graph, flat and B1: all close V-04. On S3 the graph plan does not stop the leak on its own: with V-09 stuck no plan passes every check, so it hands the choice to people and moves nothing; the others stop the leak and leave Rack A1 without water. The graph uses far more searches (118 to 141 per decision on average, including 21 to 49 max-flow runs). The same numbers are on the How it works page, read from `app/data/evaluation.json`.
+Cases: S1: leak on the Row A branch pipe; S5: small leak on the Rack A2 feed; S3: S1 with the backup link valve V-09 known stuck and really stuck. Key racks are criticality 5 (Rack A1, Rack B1). Run 2026-10-16T11:34:55Z, 5 seeds per case, 15.3 s. Scored by our own simulator (scenario_generator/plant.py) on practice data, not real equipment; a plan that needs a person's OK is scored as if approved.
 
-## Graph data model (current)
+What the numbers show, and no more:
 
-One graph per customer, named `lt_<tenant>`. Login checks the account in that customer's graph. After that, every request works on the customer named in the signed token, never one named in the request or by a model. All demo data is synthetic and tagged `source: 'synthetic'`.
+- **S1**: LeakTrace stopped the leak in 5 of 5 runs with a key rack short in 0; the flat-table rule and B1 left a key rack short in 5 and 5. Its plan needs a person's OK.
+- **S5**: No difference: LeakTrace, the flat-table rule and B1 made the same moves with the same result.
+- **S3**: LeakTrace avoids starving the key rack and asks a person; it does not stop the leak on its own. The others stop the leak and leave a key rack short in 5 of 5 runs (flat) and 5 of 5 (B1).
+
+LeakTrace does far more work per decision (118 to 141 searches on average, including 21 to 49 max-flow runs). The same table is on the How it works page, read from `app/data/evaluation.json`. Not run: a language model working from flat tables.
+
+## Architecture
+
+```
+ Browser (React + Vite + Cytoscape; every word in web/src/copy.ts)
+    |  REST, same origin
+ FastAPI ── sign-in (one graph per customer, bound to the signed token)
+    ├─ intake: reports, readings
+    ├─ six helpers: Intake → Investigator → Planner → Dispatcher → Checker → Record keeper
+    │     hand work to each other only through Task nodes in the graph
+    ├─ domain rules in code: how sure we are, plan checks, what may be done alone
+    ├─ Ask LeakTrace: graph searches + passage search, citations checked in code
+    ├─ simulated valves and notices (practice mode)
+    └─ MCP tool server (read-only domain tools)
+           |
+ FalkorDB 6.0.2: the system of record (map, reports, readings, plans, decisions, approvals,
+                 jobs, memory, documents, tickets, chats, policies, users)
+```
+
+`scenario_generator/` produces practice data and drives scenarios through the same REST API; `app/` never imports it (`tests/test_import_guard.py`, which also bans other graph libraries).
+
+## Graph model
+
+One graph per customer, named `lt_<customer>`. Every network and registry node also has the label `Entity`, with an index on `id`. All practice data carries `source: 'synthetic'`.
 
 | Nodes | Meaning |
 |---|---|
-| `Source`, `Junction`, `Segment`, `Valve`, `Consumer` | The flow network: a cooling unit, header and manifolds, pipe sections, valves (`state`, `normal_state`, `reversible`, `locked`), racks (`criticality`, `required_flow`) |
-| `Zone`, `Sensor`, `Meter`, `PDU`, `Reading` | Location, leak and pressure sensors (`state`), flow meters (`value`), power feeds (`energised`), capped reading history |
-| `Workload`, `Team`, `User` | Jobs on each rack (`criticality`, `migratable`), owning teams, login accounts (hashed passwords) |
-| `AuthorityPolicy` | What helpers may do on their own: `min_confidence`, `max_auto_criticality`, `max_auto_operations`, `rate_limit_per_zone_per_hour`, `critical_min_criticality`, `frozen`, ... |
-| `Report`, `Incident`, `Option`, `Decision`, `Task`, `Episode`, `Fact` | Reports, problems, plans with their checks, committed decisions (`status`, `requested_by`, graph `fingerprint`), work steps (evidence checks and valve moves with lease and idempotency key), a record of every tool call, learned facts (for example a valve reported stuck) |
-| `Approval`, `Execution`, `Action`, `Verification`, `AuditEvent` | Who approved and until when; one run of a plan with the exact prior valve states; each valve change made; the check against fresh readings; one record per state change |
-| `Person`, `Document` (procedures also `SOP`), `Ticket`, `Chunk`, `Conversation`, `Message` | Company knowledge: people and their teams, documents, maintenance tickets, passages with their vectors, shift chats and each person's conversations with Ask LeakTrace |
-| `Agent`, `WorkOrder`, `Playbook`, `Review`, `IncidentReport` | A helper (role, chooser, last process); a job for people with its steps and confirmations; a plan that worked before on a section, with success and failure counts; an item a manager must review; the incident report (facts and prose) |
+| `Source`, `Junction`, `Segment`, `Valve`, `Consumer` | The flow network: cooling unit, header and manifolds, pipe sections, valves (`state`, `reversible`, `locked`), racks (`criticality`, `required_flow`) |
+| `Zone`, `Sensor`, `Meter`, `PDU`, `Reading` | Location, leak and pressure sensors, flow meters, power feeds, recent readings |
+| `Workload`, `Team`, `Person`, `User` | Jobs on each rack, teams, people, sign-in accounts (hashed passwords) |
+| `Report`, `Incident`, `Option`, `Decision`, `AuthorityPolicy` | Reports, problems, plans with their checks, committed decisions (with a fingerprint of the graph they were made on), what helpers may do alone |
+| `Approval`, `Execution`, `Action`, `Verification`, `AuditEvent` | Who approved and until when; one run of a plan with the exact prior valve states; each valve change; the check against fresh readings; one record per state change |
+| `Task`, `Agent`, `Episode` | Work steps (helper steps, valve moves with lease and idempotency key), the helpers, a record of every tool call |
+| `Fact`, `Playbook`, `Review` | Things we know (for example "V-09 does not move"), plans that worked before on a section, items a manager must check |
+| `Document` (procedures also `SOP`), `Ticket`, `Chunk`, `Conversation`, `Message`, `WorkOrder`, `IncidentReport` | Documents, maintenance tickets, passages with their vectors, shift chats and each person's conversations with Ask LeakTrace, jobs for people, the incident report |
 
-Every network node also has the label `Entity`, with an index on `id`.
-
-| Relationship | Meaning |
+| Relationships | Meaning |
 |---|---|
-| `(a)-[:FLOWS_TO {id, dir, cap_base, open_cap, valve_id}]->(b)` | Flow link. `dir:'normal'` is the designed direction. A two-way pipe also has a `dir:'reverse'` edge for backfeed. `cap_base` is the capacity now (0 behind a closed valve); `open_cap` is the capacity with its valve open |
-| `ROUTED_THROUGH`, `LOCATED_IN`, `ADJACENT_TO`, `IN_ZONE` | Location |
-| `MONITORS`, `MEASURES {direction}`, `OF` | Sensors and meters; a reading belongs to its instrument |
-| `RUNS_ON`, `POWERED_BY`, `OWNS` | Dependencies and ownership |
-| `ABOUT`, `PART_OF`, `INVOLVED` | A report is about things and part of a problem; a problem involves zones and assets |
-| `HAS_OPTION`, `DECIDED`, `CHOSE {role}`, `OPERATES`, `JUSTIFIED_BY` | A problem's plans and decision; the chosen and fallback plans; valves a plan moves; the evidence behind a decision |
-| `FOR`, `OF`, `SUPERSEDES` | A work step for a problem; an episode of a problem or an audit record of a decision; fact history, and a newer decision replacing an older one |
-| `HANDED_OFF_TO`, `CLAIMED_BY`, `ON`, `DERIVED_FROM` | One helper step passing work to the next; which helper took a step; what a job is about; a job or playbook coming from a decision |
-| `MEMBER_OF`, `OWNS`, `PERFORMED`, `EXPERT_IN {score, basis, last}`, `MENTIONS`, `AUTHORED`, `IN`, `WITH` | A person's team; a team owns assets and a person owns documents; who did a ticket; who knows an asset (from tickets); a text names a thing on the map; who wrote a chat message; a message in its conversation; a conversation with a person |
-| `APPROVES`, `IMPLEMENTS`, `PART_OF`, `AUTHORIZED_BY`, `VERIFIES`, `EVIDENCED_BY` | Approval of a decision; an execution and its actions carry out a decision; valve-move steps and actions belong to an execution; an action is allowed by an approval or by the auto-mode policy; a check of a decision; a fact and the field report it came from |
+| `(a)-[:FLOWS_TO {dir, cap_base, open_cap, valve_id}]->(b)` | A flow link. A two-way pipe has a `normal` and a `reverse` edge (backfeed). `cap_base` is the capacity now (0 behind a closed valve) |
+| `MONITORS`, `MEASURES`, `IN_ZONE`, `LOCATED_IN`, `ADJACENT_TO`, `RUNS_ON`, `POWERED_BY`, `OWNS`, `MEMBER_OF` | Instruments, location, dependencies, ownership |
+| `ABOUT`, `PART_OF`, `INVOLVED`, `HAS_OPTION`, `DECIDED`, `CHOSE`, `OPERATES`, `JUSTIFIED_BY` | Reports and problems; plans, the decision, the valves a plan moves, the evidence behind it |
+| `APPROVES`, `IMPLEMENTS`, `AUTHORIZED_BY`, `VERIFIES` | Carrying a decision out, and what allowed it |
+| `FOR`, `CLAIMED_BY`, `HANDED_OFF_TO`, `OF` | Work steps for a problem, who took them, the hand-off chain, the audit trail |
+| `EVIDENCED_BY`, `SUPERSEDES`, `DERIVED_FROM`, `ON` | What a fact rests on, what replaced what, where a job or playbook came from |
+| `PERFORMED`, `EXPERT_IN {score, basis}`, `MENTIONS`, `AUTHORED`, `IN`, `WITH` | Who did a ticket, who knows an asset (from their tickets), what a text names, chats and conversations |
 
 ## Key queries and algorithms
 
-All query text lives in [`app/graph/queries/`](app/graph/queries/). Each query is saved by name, and its parameters are kept separately. Reads run through `GRAPH.RO_QUERY` with a timeout, so a read can never write.
+All query text lives in `app/graph/queries/*.cypher`, saved by name, with parameters kept separate. Reads run through `GRAPH.RO_QUERY` with a timeout, so a read can never write.
 
 | Query | What it does | Decision it drives |
 |---|---|---|
-| `q1_find_suspects` | Pipe sections in a zone with a leak alarm, ranked by alarms on the section and pressure anomalies downstream (open links only) | Where the leak probably is |
-| `flow_balance_for_segment` | For every metered region containing a section: inflow minus downstream outflow | Whether water is going missing there (a balanced region contradicts a suspect) |
-| `q2_trace_impact`, `evidence_path` | Racks downstream through open links, their jobs and owning teams, and the map path to each (multi-hop) | What is affected, who to tell, the path shown on the map |
-| `q3_exposure` | Racks in the same or an adjacent zone, with their power feeds | Whether live equipment is at risk |
-| `q4_recall_incidents` | Earlier problems on the same assets, their decisions, and active facts | Whether past experience changes the plan |
-| `brain_decisions_mentioning`, `brain_facts`, `brain_docs_mentioning` | Decisions whose plans name a valve, the facts their failed checks cite (with evidence and what replaced what), and procedures naming it | Ask LeakTrace: why a valve was avoided, with sources |
-| `brain_owners`, `brain_experts` | Teams owning an asset (directly or through the jobs on a rack); people with `EXPERT_IN` from their tickets | Who to call |
-| `brain_passages` | `db.idx.vector.queryNodes` over passages, with the document, ticket or message each belongs to | Passages for a question no direct link answers |
-| `brain_fact_supersede` | A newer fact replaces older ones (status, `valid_to`, `SUPERSEDES`) | A repaired valve can be planned on again |
-| `boundary_valves` | The first valves met walking out from a section in either direction | Which valves can cut the section off |
-| `max_flow` (`algo.maxFlow`) | Maximum flow from the cooling unit to one target, under a plan's temporary capacities | Whether the leak gets 0; whether each critical rack (alone, then together) still gets its required flow; how much the others lose |
-| `asset_flags` | Locked or irreversible valves, and active "stuck" facts | Whether a plan is feasible at all |
-| `policy_for_zone`, `actions_recent_in_zone` | The active auto-mode policy and recent actions | How much the agent may do on its own |
-| `bfs_reach` (`algo.bfs`) | Everything connected to a node by flow links | Connected reach |
-| `chunk_search` (vector index) | Nearest text passages (score is cosine distance, lower is closer) | Answers with sources (later) |
-| `task_claim`, `task_release_expired` | Conditional write so only one worker picks up a step; expired leases go back to open | Agent coordination |
+| `q1_find_suspects` | Pipe sections in a zone with a leak alarm, ranked by alarms on the section and pressure anomalies downstream | Where the leak probably is |
+| `flow_balance_for_segment` | For each metered region around a section: inflow minus downstream outflow | Whether water is going missing there (a balanced region counts against a suspect) |
+| `q2_trace_impact`, `evidence_path` | Racks downstream through open links (multi-hop), their jobs and owning teams, and the path shown on the map | What is affected and who to tell |
+| `q3_exposure` | Racks in the same or an adjacent zone, with their power feeds | Whether live equipment is near the water |
+| `q4_recall_incidents`, `asset_flags` | Earlier problems on the same equipment; locked, irreversible or "stuck" valves | Whether memory rules a plan out |
+| `boundary_valves` | The first valves met walking out from a section in each direction | Which valves can cut the section off |
+| `max_flow` (`algo.maxFlow`) | Maximum flow to one target under a plan's temporary capacities | Whether the leak gets no water; whether each key rack (alone, then together) still gets enough |
+| `policy_for_zone`, `actions_recent_in_zone` | The active auto-mode policy and recent actions | How much may be done without a person |
 | `world_snapshot` | Everything a plan depends on, in one read | Whether an approved plan is still valid when it is about to run |
-| `decision_transition`, `approval_write`, `approval_expire` | Conditional state change plus its audit record | Who may move a plan forward, and when an approval runs out |
-| `execution_start` | Starts a run only if the plan's valves are still in the expected state; creates the ordered valve-move steps | That the moves happen in order, from the state the plan assumed |
-| `move_task_claim`, `move_tasks_release_expired` | Next open valve move for a crew member; leases that ran out | That a step is never done by two people, and is finished if someone disappears |
-| `move_done`, `move_failed` | Applies a reported move (valve state, link capacities, `Action`, next step) or stops the plan (and records a stuck valve as a fact), each in one atomic write | What the graph believes about each valve |
-| `flow_balance_for_segment`, `instruments_current`, `verification_write` | Readings after the moves, compared with the plan | Verified, or failed with the check that failed |
-| `rollback_start` | Undo steps, newest first, back to the recorded prior state | Restoring the network after a failed or unwanted plan |
-| `agent_task_claim`, `agent_task_finish`, `agent_tasks_wake` | A helper picks up a step; finishes it and creates the next ones; a waiting step wakes when its decision changes | The hand-off chain between helpers |
-| `break_glass_candidates` | Plans waiting for approval that the emergency path has not looked at | Whether to act without approval |
-| `playbook_get`, `playbook_record` | Successes and failures of a plan on a section | Earned autonomy |
-| `work_orders_create`, `work_order_confirm`, `work_order_complete`, `fact_write` | Jobs from a decision; field confirmation; a valve reported stuck becomes a fact | What people must do; what later plans avoid |
-| `incident_facts`, `incident_report_write` | Everything about one problem in one read | The incident report |
+| `decision_transition`, `execution_start`, `move_done`, `move_failed`, `rollback_start` | Conditional state changes, each with its audit record, in one atomic write | Who may move a plan forward; that valves move in a safe order; undo to the exact prior state |
+| `agent_task_claim`, `move_task_claim` | Conditional write: exactly one worker picks up a step | Helpers and crew never do the same step twice |
+| `brain_decisions_mentioning`, `brain_facts`, `brain_docs_mentioning` | Decisions whose plans failed because of a valve, the facts they cite, the ticket behind each fact, procedures naming the valve | Ask LeakTrace: "why did we avoid V-09?" |
+| `brain_owners`, `brain_experts` | Teams owning an asset (directly or through jobs on a rack); people with `EXPERT_IN` from their tickets | Who to call |
+| `brain_passages` (`db.idx.vector.queryNodes`) | Nearest passages in the vector index | Passages for a question no direct link answers |
+| `brain_fact_supersede` | A newer fact replaces older ones (kept, marked superseded) | A repaired valve can be planned on again |
 
-**What-if for a plan.** A plan is written as a temporary capacity property `cap_<planId>` on every flow link:
+**Testing a plan.** Each plan writes a temporary capacity on every flow link (closed valve 0, opened valve its open capacity, links into a rack capped at what it needs) and `algo.maxFlow` runs with that capacity; the property is removed afterwards. Its name travels only inside a parameter map, never in query text.
 
-- closed valves get 0
-- opened valves get `open_cap`
-- links into a rack are capped at what the rack needs
-- every other link keeps `cap_base`
+**How sure we are** (`app/domain/confidence.py`) is a fixed formula over graph counts: leak alarm on the section 0.35, pressure anomaly downstream 0.20, missing water in the metered region 0.25, first report 0.10, second reporter 0.10, a balanced region −0.30; with fewer than two kinds of sign it is capped at 0.40. One sign alone never leads to action: LeakTrace asks for an on-site check instead.
 
-`algo.maxFlow` then runs with that capacity property, and the property is removed afterwards. The property name is passed only inside a parameter map, never in query text.
+## What the helpers may do on their own
 
-**How sure we are** (`app/domain/confidence.py`) is a fixed formula over graph counts:
-
-| Sign | Weight |
-|---|---|
-| Leak alarm on the section | 0.35 |
-| Leak alarm elsewhere in the zone (only if none on the section) | 0.10 |
-| Pressure anomaly downstream | 0.20 |
-| Meter imbalance in the smallest metered region | 0.25 |
-| First report | 0.10 |
-| Second reporter | 0.10 |
-| That region balanced (contradiction) | −0.30 |
-
-With fewer than two kinds of sign, the score is capped at 0.40.
-
-**What the agent may do on its own** (`app/domain/authority.py`). It acts only if all eight conditions hold:
+Computed in code (`app/domain/authority.py`) from graph facts. A plan is handled automatically only if all eight conditions hold:
 
 1. An active policy covers the zone and auto mode is not paused.
-2. The confidence is high enough and nothing contradicts it.
-3. No critical rack loses flow.
+2. How sure we are is high enough and nothing contradicts it.
+3. No rack that must keep running loses flow.
 4. Nothing affected is above the criticality ceiling.
-5. Every valve move can be undone and none is locked or stuck.
+5. Every valve move can be undone, and none is locked or known stuck.
 6. The plan stays within the move limit and the zone's hourly action limit.
 7. Nothing affects life safety.
 8. An undo plan and a check are ready.
 
-Otherwise the decision needs approval, and lists the conditions that failed.
+Otherwise it **needs a person's OK** and the screen lists the conditions that failed, or, if no plan passes every check, **people decide**. A person cannot approve their own request; approvals expire. Before anything moves, the plan's graph fingerprint is checked again; if the map changed, the plan is replaced. Valves that open go first, then the ones that close; commands carry idempotency keys; a crew member whose lease ran out cannot report. A low-risk plan whose check fails is undone automatically and planned again with a person's OK. An **emergency path** may act on the smallest isolating plan after a long wait with a leak near live power, but only if it starves no key rack, rests on enough evidence and auto mode is not paused; it always leaves a review item. **Earned autonomy**: a plan that worked three times on the same section may go one step above the usual ceiling, never above the manager's ceiling. The helpers cannot change policies, approve, or undo.
 
-## API (current)
+## What it remembers, and Ask LeakTrace
 
-`POST /auth/login` · `POST /assets/import` (manager) · `POST /reports` · `GET /reports/{code}` · `POST /readings` (meters account, field crew) · `GET /incidents` · `GET /incidents/{id}` · `POST /incidents/{id}/investigate` (operator, manager) · `GET /decisions/{id}` · `GET /agents/timeline?incident=`
+- **What happened** (`Episode`): every tool call, decision, approval, move and check.
+- **Things we know** (`Fact`): a valve the crew reported stuck, a valve a maintenance ticket says failed to operate. Each rests on its evidence (`EVIDENCED_BY`); a repair ticket replaces it (`SUPERSEDES`), never deletes it. A replaced fact cannot be confirmed back.
+- **Proven fixes** (`Playbook`): successes and failures of a plan on a section.
+- **Conversations** (`Conversation`, `Message`): each person's questions and answers per problem, resumed after a restart.
 
-Ask LeakTrace: `POST /brain/ask` · `GET /brain/conversation?incident=` · `POST /brain/find-out` (operator, manager) · `POST /brain/ingest` (manager)
+**Ask LeakTrace** reads documents, maintenance tickets and shift chats into the same graph (no language model): each text is linked to the map by exact id or name; a name that looks like a map id but matches nothing goes to a manager to check. To answer, it picks a saved search by the question's words (why a valve was avoided, who owns it, who knows it, what we know about it, otherwise passages from the vector index) and words the answer with fixed sentences, each claim followed by its `[id]`. **Code then checks every citation**: each id must exist on this customer's map and be among the search results, and there must be at least one; otherwise the answer is "I don't know", with an offer to send the field crew a "find out" job. The passage vectors are hashed word counts computed locally, so the passage search finds passages that share the question's words, not passages that mean the same thing in other words.
 
-Health: `GET /health` gives `falkordb_reachable` and `demo_seeded` (yes/no only; 503 unless both)
+On the practice data, "Why did we avoid valve V-09?" cites ticket `TCK-1042`, the thing we know `F-TCK-1042`, the decision that handed the choice to people, and procedures `SOP-ISO-01` and `SOP-XC-02`. After the repair ticket `TCK-1077` is read in, "What do we know about V-09?" says the earlier record no longer holds, and planning the same problem again uses V-09. "What is the capital of France?" gets "I don't know" (`tests/test_ask_leaktrace.py`).
 
-Problems, helpers, jobs and reports: `POST /incidents/{id}/close` (operator, manager) · `GET /incidents/{id}/helpers` · `GET|POST /incidents/{id}/report` · `GET /work-orders` · `POST /work-orders/{id}/take|confirm|complete` (field crew) · `GET /reviews`
+## The helpers and who chooses their steps
 
-Carrying out a decision: `POST /decisions/{id}/approve` · `/reject` · `/execute` · `/verify` · `/rollback` · `/replan` (operator, manager) · `GET /decisions/{id}/status` · `GET /decisions/{id}/audit` · `POST /tasks/claim` · `POST /tasks/{id}/result` (field crew)
+Six helpers (Intake, Investigator, Planner, Dispatcher, Checker, Record keeper) pick up steps of their kind from `Task` nodes, use only their own tools, and hand on by creating the next `Task` (`HANDED_OFF_TO`), so the hand-off chain is read straight from the graph and survives any helper process being restarted.
 
-The same steps from the command line, acting as a named user of one customer (that user's role decides what is allowed):
+**Fixed rules chose the helpers' steps in the demo and in every result in this README.** A language model can choose them instead, through any OpenAI-compatible provider (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`; no vendor SDK); when it times out, is busy, hits a rate limit, answers unusably or reaches its call cap, the rules take over, and every step records which one chose it. We tried this once with a free-tier key (`gemini-flash-latest`, 2026-10-16), S1, S2 and S5 once each plus one retry: the provider was mostly unavailable (HTTP 503 "high demand", then 429 quota), the model chose 1 of 85 steps in each attempt, the rules took the rest, and all three cases still finished correctly.
+
+Whatever chooses, authority stays in code: a helper can only call its own tools, the Planner cannot commit before testing every plan, a plan that needs approval is refused until a person approves it, and no helper can approve, undo or change the policy.
+
+**Tools the agents use.** The helpers' tools are domain tools over saved searches (find suspects, trace impact, recall memory, list plans, test a plan, commit, start the plan, create jobs, check the result, write the report). The MCP server (`python -m app.mcp_server.server`, stdio, one customer bound by `LEAKTRACE_TENANT` on the server) exposes read-only tools: `find_suspects`, `trace_impact`, `execution_status`, `ask_leaktrace`. No tool takes a customer name and none can approve, execute or undo.
+
+## The screens
+
+Six screens in plain words; every word is in `web/src/copy.ts`, every colour in `web/src/theme.css`, checked by lints. "Practice mode" shows on every screen.
+
+| Screen | Who | What it shows |
+|---|---|---|
+| Report a problem, Track my report | anyone | A short form, then a code and five plain stages, plus "I see this too". No internal ids leave the server |
+| Open problems | operator, manager, safety officer | The queue; how sure we are; the map with the "why we think so" path and what is affected; every plan with Pass or Fail per check; why it needs your OK; approve and run, the valve steps, the check, undo |
+| My jobs | field crew | Valve steps to pick up, mark done or report "it won't move"; jobs with step-by-step confirmation |
+| Auto mode | manager (others read only) | What helpers may do alone (bounded, audited), pause, what they did alone, things to review, what we've learned, proven fixes, **Reset practice data** |
+| Who did what, Ask LeakTrace | operator, manager | The hand-off chain and each helper step, with who chose it; questions answered with sources |
+| How it works | anyone | Live counts, six saved searches of one real problem with their plan and cost (run on the live map, read-only), the comparison above, the checks the test run saved |
+
+## Screens
+
+![Open problems](assets/screenshots/open-problems.png)
+Open problems: the map with the "why we think so" path, every plan with Pass or Fail per check, and why the chosen plan needs a person's OK.
+
+![Report a problem](assets/screenshots/report-a-problem.png)
+Report a problem: a short form anyone can fill in on a phone, no sign-in.
+
+![Who did what and Ask LeakTrace](assets/screenshots/who-did-what-ask-leaktrace.png)
+Who did what: each helper step and who chose it, with Ask LeakTrace answering "Why did we avoid valve V-09?" with its sources.
+
+![Auto mode settings](assets/screenshots/auto-mode-settings.png)
+Auto mode: what helpers may do on their own, the pause switch, and the manager's Reset practice data button.
+
+## Try it (judges)
+
+- Run it locally (below). The first visit after a start shows "Waking up the practice map" until the practice data is ready.
+- **Sign in** as `operator1` (open problems, approve a plan), `tech1` (field crew jobs), `staff1` or `safety1`. The sign-in screen shows the **shared practice password**. The manager account is private.
+- "Report a problem", "Track my report" and "How it works" need no sign-in.
+- Everything is practice data. It is rebuilt whenever the service starts after sleeping, and a manager can reset it.
+- Approving the waiting plan works, but on the demo no simulated meters report after the valve steps, so its check ends as failed (see Limits); the problem marked "Handled automatically" shows a complete, verified run.
+
+## Run locally
+
+Requirements: Docker; for development also Python 3.11+ and Node 22.
+
+**Everything in one container** (as deployed):
 
 ```bash
-.venv/Scripts/python -m app.cli approve --tenant demo --as operator2 --decision DEC-XXXXXXXX
-.venv/Scripts/python -m app.cli status  --tenant demo --as operator1 --decision DEC-XXXXXXXX
-# also: reject, execute, verify, rollback, replan, audit
+cp .env.example .env     # set LEAKTRACE_SECRET, LEAKTRACE_DEMO_PASSWORD (shared), LEAKTRACE_MANAGER_PASSWORD (private)
+docker compose --profile app up -d --build    # FalkorDB + API + helpers + web app; open http://localhost:8080/
 ```
 
-The agent tool server adds two read-only tools, `execution_status` and `ask_leaktrace`. No tool can approve, execute or undo anything.
+**For development** (Windows PowerShell; on macOS or Linux activate with `source .venv/bin/activate`):
 
-With FalkorDB stopped, every route answers `503 graph_unavailable`. Nothing is cached. The body says why (`reason`: `not_reachable` or `graph_empty`) with the host, port and graph name, and the server log says the same with the fix; the screens show plain words and keep these in a Details drawer.
+```powershell
+py -3.12 -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt   # first time only
+docker compose up -d                                   # 1. FalkorDB on localhost:6380 (browser UI on :3000)
+.\.venv\Scripts\Activate.ps1                          # 2. in every new terminal
+python -m scenario_generator.demo --tenant demo        # 3. the practice data (resets the demo customer)
+cd web; npm install; npm run build; cd ..              # 4. the web app (again only after web/ changes)
+python -m uvicorn app.api.main:app --port 8000         # 5. open http://localhost:8000/
+```
 
-## Tests
+`LEAKTRACE_SECRET` signs sign-in tokens; without it everyone is signed out on each restart.
 
-`pytest -q` runs the tests against the live FalkorDB. They cover:
+## Troubleshooting
 
-- the docs max-flow example (13)
-- the what-if checks
-- Q1–Q4
-- S1 across several seeds, with every plan and number checked by hand
-- weak-evidence cases
-- each auto-mode condition on its own
-- the stop switch (FalkorDB unreachable: the API answers 503, the CLI exits with an error)
-- the import guard (`app/` never imports the scenario generator or another graph library)
-- token-bound customers (a token for one customer cannot read another; forged and expired tokens are refused)
-- task claim races and lease expiry
-- every legal and illegal state change, and the audit record each one leaves
-- approvals: the requester cannot approve, wrong roles and other customers are refused, forged and expired tokens are refused, approvals expire
-- pausing auto mode turns a low-risk plan into one that needs approval; a "people decide" plan never runs
-- a repeated report never moves a valve twice; a crew member whose lease ran out cannot report
-- the stale-plan guard (valve state, criticality or a stuck-valve fact changed after approval)
-- undo restoring the exact prior state after a partial failure
-- S1 carried out on seeds 1-5 (verified every time) and every case in the table above
-- four FalkorDB behaviours the saved queries work around, pinned so a change is noticed
-- the helpers: the hand-off chain through task nodes, each helper using only its own tools, refusals coming from code when a scripted chooser tries forbidden things, S1/S2/S5 tool sequences differing, recall after every helper process is restarted
-- closing problems, a new alarm opening a new problem, the escalation after an automatic undo
-- the emergency path (acts after the wait; refuses when paused, unsure, starving a critical rack or stale) and earned autonomy (never above the manager's ceiling; the policy is unchanged by the helpers)
-- jobs with field confirmation, and the incident report
-- the language-model chooser against a fake OpenAI-compatible server: fallback on timeout, rate limit and bad output, the call cap, and honest labels (no model is called in tests)
-- the screens' routes (public tracking shows no internal ids; settings are manager-only, bounded and audited)
-- lints: plain words in `copy.ts`, no words hard-coded in screens, colours only in `theme.css`, no font weight above 600, one primary button per screen, no other track named in public text
-- How it works honesty: numbers equal live counts and change with the data, the query text shown is the text that runs, every run is read-only (a write through that path is rejected), demo customer only, and an error with no numbers when FalkorDB is down
-- `/health` and the failure reasons: not reachable versus graph empty (missing, or wiped after sign-in), in the body and the log; an unknown customer still looks like a wrong password
-- Ask LeakTrace: the corpus read in (twice changes nothing), the V-09 question citing a ticket, a thing we know and a procedure, who owns and who knows, "I don't know" with the find-out job, citations checked in code against a stand-in model that adds or drops ids, another customer getting no answer, the knowledge update changing later answers and the next plan, a replaced record that cannot be confirmed back, conversations saved per person and problem and read back by a new process
-- the comparison with flat tables and the baselines (one seed) and How it works reading the saved result
+- **"Waking up the practice map" for a long time, or "Can't reach the map right now":** open `/health`. `falkordb_reachable: false`: FalkorDB is not running (`docker compose up -d`; `docker logs leaktrace-falkordb` says why it stopped). `demo_seeded: false`: the practice data is missing or still being built (run step 3, or wait for the container's start-up). The server log and the screen's Details drawer name the host, port and graph.
+- **`No module named 'falkordb'`:** the Python environment is not active (step 2).
+- **`Missing argument 'APP'`:** uvicorn needs `app.api.main:app` (step 5).
+- **The container stops at start with "ensure-demo failed":** `LEAKTRACE_DEMO_PASSWORD` or `LEAKTRACE_MANAGER_PASSWORD` is not set.
 
-`LEAKTRACE_KILLSWITCH_DOCKER=1 pytest tests/test_kill_switch.py` also stops the real container twice:
+## Deploy (Render, free web service)
 
-- after a full S1 run: the stored decision can no longer be read until the container restarts
-- in the middle of carrying a plan out: nothing is reported as verified while FalkorDB is down, and after the restart the crew's retried report is applied once and the plan finishes
+Measured here under the same limits as Render's free instance (`docker run --cpus 0.1 --memory 512m`, no disk): memory peaked at 140.8 MiB of 512 MB (idle about 95.4 MiB); one decision took 1.7 s (median of 3); a full S1 run took 5.5 to 7.7 s; from container start the waking page answered after 26.4 s and the practice data was ready after 46.0 s. Render's own docs do not say whether a Dockerfile service may use the Free instance type (third-party guides show it working); check when creating the service.
+
+1. In Render, **New → Web Service → Build and deploy from a Git repository**, connect GitHub and pick this repository, branch `main`.
+2. **Language: Docker**. **Dockerfile Path: `deploy/Dockerfile`** (build context: the repository root).
+3. **Instance type: Free.**
+4. **Environment variables:**
+
+   | Name | Value | Secret? |
+   |---|---|---|
+   | `LEAKTRACE_SECRET` | a long random value (Render's "Generate" button) | yes |
+   | `LEAKTRACE_MANAGER_PASSWORD` | a private password for `manager1` | yes |
+   | `LEAKTRACE_DEMO_PASSWORD` | the shared practice password judges will see on the sign-in screen (pick something easy to type) | no: it is public by design, practice data only |
+
+   Do not set `LLM_*` (the fixed rules choose the steps). Render sets `PORT` itself.
+5. **Advanced → Health Check Path: `/public/info`** (not `/health`, which answers 503 on purpose while the practice data is being rebuilt).
+6. **Create Web Service**, wait for the build, open the `onrender.com` address. The first load shows "Waking up the practice map" until the practice data is ready.
+
+Render's free web services sleep after 15 minutes without traffic and take about a minute to wake; their filesystem is not kept, so every wake starts with fresh practice data.
+
+## Scenarios and how to reproduce them
+
+All practice data; every step goes through the REST API.
+
+| Scenario | Command | What happens |
+|---|---|---|
+| S1: leak near a key rack | `python -m scenario_generator.run s1 --tenant demo --seed 7 --reset --execute happy` | The nearest valve would starve Rack A1; the chosen plan opens the backup link V-09 first, then closes V-01 and V-07. It needs a person's OK (Rack A1 is above the ceiling; 3 moves where 2 are allowed); after approval the crew moves the valves and fresh readings verify it |
+| S1 variants | `--execute stuck_v09`, `stuck_v07`, `worker_dies`, `graph_changes`, `approval_expires` | A stuck valve stops the plan (undone exactly, a new plan avoids it); a crew member vanishes (lease, another finishes, 3 physical moves); the leak grows after approval (refused as stale, re-planned); the approval runs out |
+| S2: ambiguous evidence | `python -m scenario_generator.run s2 --tenant demo --seed 7 --reset --helpers evidence` | One sign alone: asks for an on-site check, tests no plans |
+| S3: valve known stuck | `pytest tests/test_restart_recall.py` | After every helper process has ended, a new leak on the same pipe recalls the stuck V-09 and the decision hands the choice to people |
+| S5: low-risk leak | `python -m scenario_generator.run s5 --tenant demo --seed 7 --reset --execute auto` | Handled automatically and verified with no person; `passing_valve`: the check fails and the plan is undone automatically |
+| S9: answers with sources | `python -m scenario_generator.knowledge --tenant s9demo --reset` | Reads the practice documents, tickets and chats, avoids V-09, answers the questions above, then the repair update changes the answers |
+| Helpers | add `--helpers approve` (S1), `--helpers auto` (S5); `--helper-process` runs each round as a new process | The six helpers do the work through task nodes |
+| The comparison | `python -m scenario_generator.evaluate --seeds 5` | The table above |
+
+## Results
+
+Everything below ran on Windows 11, Docker Desktop, FalkorDB 6.0.2, Python 3.12.8.
+
+- **Tests:** `pytest -q` against a live FalkorDB: 278 tests on 2026-10-16: 276 passed in the full run (4 min 9 s), and the 2 opt-in tests that stop the real FalkorDB container passed separately with LEAKTRACE_KILLSWITCH_DOCKER=1. They include the stop switch, the import guard, every auto-mode condition alone, approvals, the stale-plan guard, exact undo, claim races, customers isolated by token, S1 on five seeds, the helpers' hand-offs and restart recall, Ask LeakTrace citations and refusals, the knowledge update, judge access, and lints for plain words, colours and public wording.
+- **The comparison** above (5 seeds per case, our own simulator, practice data).
+- **One container:** under 0.1 CPU and 512 MB, peak memory 140.8 MiB, one decision 1.7 s, a full S1 run 5.5-7.7 s (all 5 verified), ready 46.0 s after start.
+- **Model:** fixed rules chose every step in these results; the free-tier model run is described above.
+
+## Limits
+
+- Practice data only, on one simulated cooling loop (8 pipe sections, 9 valves, 4 racks); no real equipment, no real notifications.
+- After a person approves a plan in the demo, the field crew's valve steps work, but the demo does not post simulated meter readings afterwards, so the check may mark the plan failed after 2 minutes. The full loop (approve, move, fresh readings, verified) runs in the scenario commands below and produced the practice data's "handled automatically" problem.
+- The flow model is a capacity network (max flow), not hydraulics.
+- The passage search is word-based (hashed word counts), not a semantic model; direct graph links carry the important answers.
+- The comparison is scored in our own simulator, and the flat-table arm is a fixed rule, not LeakTrace's checks rebuilt without a graph.
+- Not built: public notices for a safety officer, photo upload, the public-water and factory networks, a dark theme.
+- FalkorDB 6.0.2 crashed once during development (a panic inside FalkorDB, not reproduced in 6 seeds and 15,413 concurrent requests); the setup now restarts it and keeps an append-only file.
+- A language model choosing the steps has not been shown to work beyond the free-tier run above.
 
 ## AI assistance
 
-This project is built with an AI coding assistant (Claude Code). Separately, the product's helpers can use a language model at run time to choose tools; that is optional, and every result in this README was produced without it. The team directs the design, reviews the code, and checks every result against a running FalkorDB.
+Claude Code wrote most of the code and tests. Claude chat was used for planning, wireframes and prompts. I reviewed and ran the code, and I can explain the code and the decisions behind it. The demo runs on practice data.
+
+---
+
+Built for Graph Hacks 2026, Track 1: Agents That Act on Connected Data.

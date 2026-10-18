@@ -5,9 +5,10 @@
 Approaches (all see the same evidence: which leak sensor alarms, so which pipe section is suspected):
   graph   LeakTrace itself, through its REST API: multi-hop searches, algo.maxFlow per plan, memory, authority.
           Its committed plan is scored (a plan that needs a person's OK is scored as if approved).
-  flat    the graph tools replaced by flat tables: one lookup per table, no paths and no max flow. It closes the
-          valves next to the suspected section and treats as affected only racks fed directly by that section;
-          it reads the ticket table for the valves it closes. It asks a person only if a key rack is affected.
+  flat    a fixed rule on flat tables. It does NOT run LeakTrace's checks: it closes the valves next to the
+          suspected section, counts as affected only racks fed directly by that section, skips a valve with an
+          open failed-to-operate ticket, and asks a person only if a directly fed rack is a key rack. One lookup
+          per table, no paths, no max flow. It is close to B1, not "LeakTrace without the graph".
   B1      close the nearest valve upstream of the suspected section.
   B2      isolate the whole loop (close every valve).
 Not run: B3 (a language model with flat tables): no model key was set.
@@ -146,6 +147,28 @@ def run(seeds: int) -> dict:
     return rows
 
 
+def notes(summary: list[dict]) -> dict:
+    """One plain sentence per case, worked out from the numbers (never typed by hand)."""
+    s = {(r["case"], r["approach"]): r for r in summary}
+    same = ("leak_stopped", "key_rack_short_runs", "racks_short_avg", "moves_avg")
+    out = {}
+    for case in CASES:
+        g, f, b1 = s[(case, "graph")], s[(case, "flat")], s[(case, "B1")]
+        if all(g[k] == f[k] == b1[k] for k in same):
+            out[case] = "No difference: LeakTrace, the flat-table rule and B1 made the same moves with the same result."
+        elif g["leak_stopped"] < g["runs"] and g["key_rack_short_runs"] == 0 and g["asked_person"] == g["runs"]:
+            out[case] = ("LeakTrace avoids starving the key rack and asks a person; it does not stop the leak on its "
+                         f"own. The others stop the leak and leave a key rack short in {f['key_rack_short_runs']} of "
+                         f"{f['runs']} runs (flat) and {b1['key_rack_short_runs']} of {b1['runs']} (B1).")
+        elif g["key_rack_short_runs"] < min(f["key_rack_short_runs"], b1["key_rack_short_runs"]):
+            out[case] = (f"LeakTrace stopped the leak in {g['leak_stopped']} of {g['runs']} runs with a key rack short in "
+                         f"{g['key_rack_short_runs']}; the flat-table rule and B1 left a key rack short in "
+                         f"{f['key_rack_short_runs']} and {b1['key_rack_short_runs']}. Its plan needs a person's OK.")
+        else:
+            out[case] = "See the numbers; no simple summary applies."
+    return out
+
+
 def summarise(rows: list[dict]) -> list[dict]:
     out = []
     for case in CASES:
@@ -177,12 +200,18 @@ def main(argv=None) -> int:
                              f"FalkorDB at {config.FALKORDB_HOST}:{config.FALKORDB_PORT}",
               "seeds": a.seeds, "cases": {"S1": "leak on the Row A branch pipe", "S5": "small leak on the Rack A2 feed",
                                          "S3": "S1 with the backup link valve V-09 known stuck and really stuck"},
-              "approaches": {"graph": "LeakTrace (multi-hop searches, max flow per plan, memory, authority)",
-                             "flat": "flat tables: one lookup per table, no paths, no max flow",
-                             "B1": "close the nearest valve upstream", "B2": "isolate the whole loop"},
+              "approaches": {
+                  "graph": "LeakTrace through its API: likely causes, what is affected several links away, every "
+                           "plan tested with max flow against its checks, what it remembers, and the auto-mode limits",
+                  "flat": "a fixed rule on flat tables, not LeakTrace's checks: close the valves next to the "
+                          "suspected section, count only racks fed directly by it, skip a valve with an open "
+                          "failed-to-operate ticket; one lookup per table, no paths, no max flow",
+                  "B1": "close the nearest valve upstream of the suspected section",
+                  "B2": "isolate the whole loop (close every open valve)"},
               "not_run": ["B3: a language model with flat tables (no model key was set)"],
-              "scored_by": "scenario_generator/plant.py (simulated plant, practice data); a plan that needs a person's OK is scored as if approved",
-              "summary": summarise(rows), "runs": rows}
+              "scored_by": "our own simulator (scenario_generator/plant.py) on practice data, not real equipment; "
+                           "a plan that needs a person's OK is scored as if approved",
+              "summary": summarise(rows), "notes": notes(summarise(rows)), "runs": rows}
     Path(a.out).write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(json.dumps(result["summary"], indent=1))
     return 0

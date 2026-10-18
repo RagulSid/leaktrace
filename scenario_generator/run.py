@@ -66,13 +66,15 @@ def client(base_url: str | None):
 class Session:
     """One tenant, one HTTP client, a login token per demo user."""
 
-    def __init__(self, tenant: str, password: str, base_url: str | None = None):
+    def __init__(self, tenant: str, password: str, base_url: str | None = None, manager_password: str | None = None):
         self.c, self.tenant, self.password = client(base_url), tenant, password
+        self.manager_password = manager_password or password
         self.tokens: dict[str, str] = {}
 
     def headers(self, user: str) -> dict:
         if user not in self.tokens:
-            r = self.c.post("/auth/login", json={"tenant": self.tenant, "username": user, "password": self.password})
+            pw = self.manager_password if user in ("manager1", "meters1") else self.password
+            r = self.c.post("/auth/login", json={"tenant": self.tenant, "username": user, "password": pw})
             self.tokens[user] = self._check(r, None)["token"]
         return {"Authorization": f"Bearer {self.tokens[user]}"}
 
@@ -97,14 +99,15 @@ def _ok(resp):
     return Session._check(resp, None)
 
 
-def _start(tenant: str, *, reset: bool, base_url: str | None, password: str | None) -> Session:
+def _start(tenant: str, *, reset: bool, base_url: str | None, password: str | None,
+           manager_password: str | None = None) -> Session:
     if reset:
         if base_url:
             raise ValueError("--reset only works in-process")
         from app.cli import bootstrap
 
-        password = bootstrap(tenant, password=password, reset=True)["password"]
-    return Session(tenant, password or os.environ["LEAKTRACE_DEMO_PASSWORD"], base_url)
+        password = bootstrap(tenant, password=password, reset=True, manager_password=manager_password)["password"]
+    return Session(tenant, password or os.environ["LEAKTRACE_DEMO_PASSWORD"], base_url, manager_password)
 
 
 def _investigate(sess: Session, scen: dict, *, investigate: bool, import_pack: bool) -> dict:
@@ -267,10 +270,10 @@ def drive_helpers(sess: Session, incident: str, plant: Plant, crew: FieldWorker,
 
 def run_helpers(name: str, variant: str, tenant: str, seed: int, *, reset: bool = False, base_url: str | None = None,
                 password: str | None = None, import_pack: bool = False, process: bool = False,
-                lease_s: int = 30, chooser: str = "rules") -> dict:
+                lease_s: int = 30, chooser: str = "rules", manager_password: str | None = None) -> dict:
     if variant not in HELPER_VARIANTS.get(name, ()):
         raise ValueError(f"no helper variant {variant!r} for {name}; choose from {HELPER_VARIANTS.get(name)}")
-    sess = _start(tenant, reset=reset, base_url=base_url, password=password)
+    sess = _start(tenant, reset=reset, base_url=base_url, password=password, manager_password=manager_password)
     scen = SCENARIOS[name](seed)
     out = _investigate(sess, scen, investigate=False, import_pack=reset or import_pack)
     inc = out["incident"]

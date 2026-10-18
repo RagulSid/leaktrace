@@ -30,6 +30,15 @@ FALKORDB_PASSWORD = os.getenv("FALKORDB_PASSWORD") or None
 # How long to wait for a TCP connection to FalkorDB before failing (seconds).
 FALKORDB_CONNECT_TIMEOUT_S = _float("FALKORDB_CONNECT_TIMEOUT_S", 3.0)
 DEMO_TENANT = os.getenv("LEAKTRACE_DEMO_TENANT", "demo")
+# Practice accounts of the demo customer. The shared password (operator, field crew, staff, safety officer) is public
+# by design: the sign-in screen shows it so judges can get in. The manager and the meters account use a separate,
+# private password: only a manager can change auto-mode limits or reset the practice data.
+DEMO_PASSWORD = os.getenv("LEAKTRACE_DEMO_PASSWORD") or None
+MANAGER_PASSWORD = os.getenv("LEAKTRACE_MANAGER_PASSWORD") or None
+SHOW_PRACTICE_PASSWORD = os.getenv("LEAKTRACE_SHOW_PRACTICE_PASSWORD", "1") == "1"
+# What ensure-demo runs to tell the practice story on an empty demo graph (a command, set by whoever runs the
+# server; the app never imports the scenario generator). Empty: only the accounts and the practice map.
+DEMO_SEED_COMMAND = os.getenv("LEAKTRACE_DEMO_SEED_COMMAND", "python -m scenario_generator.demo --tenant {tenant}")
 
 # Every read gets a server-side timeout so a bad query cannot hang a request.
 READ_TIMEOUT_MS = _int("LEAKTRACE_READ_TIMEOUT_MS", 2000)

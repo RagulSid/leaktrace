@@ -16,6 +16,7 @@ NODE_LABELS = frozenset({
     "AuthorityPolicy", "Episode", "Fact", "Playbook", "Conversation", "Message", "Agent", "Task", "User",
     # company knowledge
     "Person", "Team", "Vendor", "Document", "Chunk", "Ticket", "Policy", "SOP", "Review", "IncidentReport",
+    "PracticeData",
 })
 
 REL_TYPES = frozenset({

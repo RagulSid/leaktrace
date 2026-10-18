@@ -1,6 +1,6 @@
 {
- "ran_at": "2026-10-16T07:25:54Z",
- "seconds": 24.0,
+ "ran_at": "2026-10-16T11:34:55Z",
+ "seconds": 15.3,
  "environment": "Windows 11, Python 3.12.8, FalkorDB at 127.0.0.1:6380",
  "seeds": 5,
  "cases": {
@@ -9,15 +9,15 @@
   "S3": "S1 with the backup link valve V-09 known stuck and really stuck"
  },
  "approaches": {
-  "graph": "LeakTrace (multi-hop searches, max flow per plan, memory, authority)",
-  "flat": "flat tables: one lookup per table, no paths, no max flow",
-  "B1": "close the nearest valve upstream",
-  "B2": "isolate the whole loop"
+  "graph": "LeakTrace through its API: likely causes, what is affected several links away, every plan tested with max flow against its checks, what it remembers, and the auto-mode limits",
+  "flat": "a fixed rule on flat tables, not LeakTrace's checks: close the valves next to the suspected section, count only racks fed directly by it, skip a valve with an open failed-to-operate ticket; one lookup per table, no paths, no max flow",
+  "B1": "close the nearest valve upstream of the suspected section",
+  "B2": "isolate the whole loop (close every open valve)"
  },
  "not_run": [
   "B3: a language model with flat tables (no model key was set)"
  ],
- "scored_by": "scenario_generator/plant.py (simulated plant, practice data); a plan that needs a person's OK is scored as if approved",
+ "scored_by": "our own simulator (scenario_generator/plant.py) on practice data, not real equipment; a plan that needs a person's OK is scored as if approved",
  "summary": [
   {
    "case": "S1",
@@ -188,6 +188,11 @@
    "errors": 0
   }
  ],
+ "notes": {
+  "S1": "LeakTrace stopped the leak in 5 of 5 runs with a key rack short in 0; the flat-table rule and B1 left a key rack short in 5 and 5. Its plan needs a person's OK.",
+  "S5": "No difference: LeakTrace, the flat-table rule and B1 made the same moves with the same result.",
+  "S3": "LeakTrace avoids starving the key rack and asks a person; it does not stop the leak on its own. The others stop the leak and leave a key rack short in 5 of 5 runs (flat) and 5 of 5 (B1)."
+ },
  "runs": [
   {
    "case": "S1",
@@ -199,7 +204,7 @@
    "lookups": 141,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 447.6,
+   "ms": 298.9,
    "moves_list": [
     "close V-01",
     "close V-07",
@@ -312,7 +317,7 @@
    "lookups": 141,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 543.7,
+   "ms": 251.7,
    "moves_list": [
     "close V-01",
     "close V-07",
@@ -425,7 +430,7 @@
    "lookups": 141,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 479.9,
+   "ms": 238.0,
    "moves_list": [
     "close V-01",
     "close V-07",
@@ -538,7 +543,7 @@
    "lookups": 141,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 502.7,
+   "ms": 268.8,
    "moves_list": [
     "close V-01",
     "close V-07",
@@ -651,7 +656,7 @@
    "lookups": 141,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 435.6,
+   "ms": 271.4,
    "moves_list": [
     "close V-01",
     "close V-07",
@@ -764,7 +769,7 @@
    "lookups": 118,
    "max_flow_calls": 21,
    "errors": 0,
-   "ms": 340.0,
+   "ms": 239.7,
    "moves_list": [
     "close V-04"
    ],
@@ -867,7 +872,7 @@
    "lookups": 118,
    "max_flow_calls": 21,
    "errors": 0,
-   "ms": 336.3,
+   "ms": 236.2,
    "moves_list": [
     "close V-04"
    ],
@@ -970,7 +975,7 @@
    "lookups": 118,
    "max_flow_calls": 21,
    "errors": 0,
-   "ms": 243.9,
+   "ms": 191.6,
    "moves_list": [
     "close V-04"
    ],
@@ -1073,7 +1078,7 @@
    "lookups": 118,
    "max_flow_calls": 21,
    "errors": 0,
-   "ms": 295.2,
+   "ms": 174.4,
    "moves_list": [
     "close V-04"
    ],
@@ -1176,7 +1181,7 @@
    "lookups": 118,
    "max_flow_calls": 21,
    "errors": 0,
-   "ms": 353.7,
+   "ms": 170.4,
    "moves_list": [
     "close V-04"
    ],
@@ -1279,7 +1284,7 @@
    "lookups": 136,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 319.9,
+   "ms": 264.3,
    "moves_list": [],
    "leak_stopped": false,
    "leak_flow_left": 9.07,
@@ -1385,7 +1390,7 @@
    "lookups": 136,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 452.5,
+   "ms": 221.0,
    "moves_list": [],
    "leak_stopped": false,
    "leak_flow_left": 15.65,
@@ -1493,7 +1498,7 @@
    "lookups": 136,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 419.8,
+   "ms": 253.6,
    "moves_list": [],
    "leak_stopped": false,
    "leak_flow_left": 9.9,
@@ -1599,7 +1604,7 @@
    "lookups": 136,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 367.5,
+   "ms": 237.6,
    "moves_list": [],
    "leak_stopped": false,
    "leak_flow_left": 9.89,
@@ -1705,7 +1710,7 @@
    "lookups": 136,
    "max_flow_calls": 49,
    "errors": 0,
-   "ms": 434.8,
+   "ms": 251.4,
    "moves_list": [],
    "leak_stopped": false,
    "leak_flow_left": 12.98,

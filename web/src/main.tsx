@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./theme.css";
 import { api, session, Who } from "./api";
 import { Shell } from "./components/Shell";
+import { WakeGate } from "./components/WakeGate";
 import { AutoMode } from "./views/AutoMode";
 import { HowItWorks } from "./views/HowItWorks";
 import { Jobs } from "./views/Jobs";
@@ -57,4 +58,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(<StrictMode><WakeGate><App /></WakeGate></StrictMode>);

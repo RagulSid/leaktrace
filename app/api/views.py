@@ -16,13 +16,16 @@ from app.agents import runtime as helpers
 from app.api.auth import Principal, require
 from app.execution import audit as audit_log
 from app.execution import service as execution
-from app.graph.client import TenantGraph, rows
+from pathlib import Path
+
+from app.graph.client import GraphUnavailable, TenantGraph, rows
 from app.intake.reports import UnknownAsset, ingest_report
 from app.memory import episodic
 from app.permissions import FIELD, VIEWERS
 
 router = APIRouter()
 MANAGERS = ("manager",)
+PACK = Path(__file__).resolve().parents[2] / "packs" / "datacenter" / "topology.json"
 
 
 # ---------------------------------------------------------------- simple per-visitor rate limit (public routes)
@@ -67,10 +70,55 @@ class PublicReportIn(BaseModel):
     asset_code: str | None = Field(default=None, max_length=40)
 
 
+PUBLIC_ACCOUNTS = ["operator1", "tech1", "staff1", "safety1"]
+
+
 @router.get("/public/info")
 def public_info():
-    """What the public screens need: which customer the demo is (the login form sends it back)."""
-    return {"demo_tenant": config.DEMO_TENANT, "practice": True}
+    """What the public screens need: which customer the demo is (the login form sends it back) and, for judges,
+    the practice accounts with the shared practice password (public by design; practice data only). The manager
+    password is never sent."""
+    shown = config.DEMO_PASSWORD if config.SHOW_PRACTICE_PASSWORD else None
+    return {"demo_tenant": config.DEMO_TENANT, "practice": True,
+            "practice_sign_in": {"accounts": PUBLIC_ACCOUNTS, "password": shown} if shown else None}
+
+
+# ---------------------------------------------------------------- reset the practice data (manager only)
+
+_reset_lock = threading.Lock()
+_reset_state = {"running": False, "last": None}
+
+
+def _run_reset(tenant: str) -> None:
+    from app.cli import Refused, ensure_demo, reset_graph
+
+    try:
+        reset_graph(TenantGraph(tenant))
+        out = ensure_demo(tenant, str(PACK))
+        _reset_state["last"] = {"ok": True, "at": clock.now(), "story": out.get("story")}
+    except (Refused, GraphUnavailable) as e:
+        _reset_state["last"] = {"ok": False, "at": clock.now(), "error": type(e).__name__}
+    finally:
+        _reset_state["running"] = False
+        _reset_lock.release()
+
+
+@router.post("/practice/reset", status_code=202)
+def practice_reset(p: Principal = Depends(require(*MANAGERS))):
+    """Wipe the demo customer's practice data and build it again (ensure-demo), in the background. Only for the
+    demo customer; one reset at a time. Until it is done the screens show "waking up"."""
+    if p.tenant != config.DEMO_TENANT:
+        raise HTTPException(403, "only the demo customer's practice data can be reset")
+    if not _reset_lock.acquire(blocking=False):
+        raise HTTPException(409, "a reset is already running")
+    _reset_state["running"] = True
+    threading.Thread(target=_run_reset, args=(p.tenant,), daemon=True).start()
+    return {"status": "resetting"}
+
+
+@router.get("/practice/reset")
+def practice_reset_status(p: Principal = Depends(require(*MANAGERS))):
+    return dict(_reset_state)
 
 
 @router.post("/public/reports", dependencies=[Depends(_limit_public)])

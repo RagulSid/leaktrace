@@ -48,6 +48,18 @@ export function AutoMode({ who, onPaused }: { who: Who; onPaused: () => void }) 
                 </button>
               )}
             </div>
+            {manager && (
+              <div className="card spread">
+                <div className="stack" style={{ gap: 4 }}>
+                  <b style={{ color: "var(--ink)" }}>{copy.auto.resetTitle}</b>
+                  <span className="muted small">{copy.auto.resetNote}</span>
+                </div>
+                <button className="btn" onClick={() => {
+                  if (!window.confirm(copy.auto.resetConfirm)) return;
+                  api("/practice/reset", { method: "POST" }).then(() => window.location.reload()).catch(setErr);
+                }}>{copy.auto.resetButton}</button>
+              </div>
+            )}
             <form className="card stack" onSubmit={(e) => { e.preventDefault(); run(() => api(`/policies/${policy.id}`, { method: "PUT", body: { changes } }), copy.auto.saved); }}>
               <h2>{copy.auto.mayDo}</h2>
               {(Object.keys(copy.auto.fields) as Field[]).map((k) => (

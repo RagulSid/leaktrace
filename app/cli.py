@@ -32,9 +32,11 @@ from app.graph.client import GraphUnavailable, TenantGraph, rows
 from app.graph.importer import import_pack, load_pack
 from app.graph.schema import ensure_schema
 
-# One synthetic account per role, for practice mode.
+# One synthetic account per role, for practice mode. PRIVATE_USERS use the manager password; the rest share the
+# public practice password.
 DEMO_USERS = {"manager1": "manager", "operator1": "operator", "operator2": "operator", "staff1": "staff",
               "tech1": "tech", "tech2": "tech", "safety1": "authority", "meters1": "integration"}
+PRIVATE_USERS = ("manager1", "meters1")
 
 DECISION_COMMANDS = ("approve", "reject", "execute", "status", "verify", "rollback", "replan", "audit")
 
@@ -49,8 +51,10 @@ def reset_graph(tg: TenantGraph) -> None:
             raise
 
 
-def bootstrap(tenant: str, password: str | None = None, reset: bool = False) -> dict:
-    """Create the tenant graph's indexes and one demo user per role. Returns the users and password."""
+def bootstrap(tenant: str, password: str | None = None, reset: bool = False,
+              manager_password: str | None = None) -> dict:
+    """Create the tenant graph's indexes and one demo user per role. The manager and meters accounts get
+    `manager_password` (by default the same password). Returns the users and password."""
     from app.api.auth import add_user
 
     tg = TenantGraph(tenant)
@@ -58,15 +62,31 @@ def bootstrap(tenant: str, password: str | None = None, reset: bool = False) -> 
         reset_graph(tg)
     ensure_schema(tg)
     password = password or os.getenv("LEAKTRACE_DEMO_PASSWORD") or secrets.token_urlsafe(12)
+    manager_password = manager_password or password
     for user, role in DEMO_USERS.items():
-        add_user(tg, user, role, password)
+        add_user(tg, user, role, manager_password if user in PRIVATE_USERS else password)
     return {"graph": tg.name, "users": DEMO_USERS, "password": password}
 
 
-def ensure_demo(tenant: str, pack: str, password: str | None = None) -> dict:
-    """Seed the demo customer (schema, demo users, practice network) only when its graph is missing or empty.
-    Safe to run on every start: an existing graph is left untouched. Needs LEAKTRACE_DEMO_PASSWORD (or
-    `password`), so no generated password ever ends up in a log."""
+def mark_practice_ready(tg: TenantGraph) -> None:
+    """The practice data is complete; /health reports the demo customer as seeded only after this."""
+    import time
+
+    tg.write("practice_ready_mark", {"ts": time.time()})
+
+
+def ensure_demo(tenant: str, pack: str, password: str | None = None, manager_password: str | None = None,
+                seed_command: str | None = None) -> dict:
+    """Make sure the demo customer is there. An existing graph is left untouched, so this is safe on every start.
+    On a missing or empty graph: run the practice-story command (LEAKTRACE_DEMO_SEED_COMMAND, from server config;
+    it creates the accounts, the map and the practice problems), or with no command only the accounts and the
+    practice map. Needs both passwords (LEAKTRACE_DEMO_PASSWORD, LEAKTRACE_MANAGER_PASSWORD), so no made-up
+    password ever ends up in a log."""
+    import shlex
+    import subprocess
+    from pathlib import Path
+
+    from app import config
     from app.graph.client import get_db
 
     tg = TenantGraph(tenant)
@@ -74,12 +94,28 @@ def ensure_demo(tenant: str, pack: str, password: str | None = None) -> dict:
     nodes = rows(tg.read("stats"))[0]["nodeCount"] if exists else 0
     if nodes:
         return {"graph": tg.name, "seeded": False, "nodes": nodes}
-    password = password or os.getenv("LEAKTRACE_DEMO_PASSWORD")
-    if not password:
-        raise Refused({"error": "demo_password_not_set", "hint": "set LEAKTRACE_DEMO_PASSWORD"})
-    bootstrap(tenant, password=password)
+    password = password or config.DEMO_PASSWORD or os.getenv("LEAKTRACE_DEMO_PASSWORD")
+    manager_password = manager_password or config.MANAGER_PASSWORD or os.getenv("LEAKTRACE_MANAGER_PASSWORD")
+    missing = [k for k, v in (("LEAKTRACE_DEMO_PASSWORD", password), ("LEAKTRACE_MANAGER_PASSWORD", manager_password)) if not v]
+    if missing:
+        raise Refused({"error": "demo_password_not_set", "hint": "set " + " and ".join(missing)})
+    command = config.DEMO_SEED_COMMAND if seed_command is None else seed_command
+    if command:
+        argv = shlex.split(command.format(tenant=tenant))
+        if argv[0] in ("python", "python3"):
+            argv[0] = sys.executable  # the same interpreter (and installed packages) as this process
+        env = {**os.environ, "LEAKTRACE_DEMO_PASSWORD": password, "LEAKTRACE_MANAGER_PASSWORD": manager_password}
+        done = subprocess.run(argv, cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+                              timeout=600)
+        if done.returncode != 0:
+            raise Refused({"error": "demo_seed_failed", "exit": done.returncode, "stderr": done.stderr[-1500:]})
+        mark_practice_ready(tg)
+        return {"graph": tg.name, "seeded": True, "story": True, "nodes": rows(tg.read("stats"))[0]["nodeCount"],
+                "users": sorted(DEMO_USERS)}
+    bootstrap(tenant, password=password, manager_password=manager_password)
     counts = import_pack(tg, load_pack(pack))
-    return {"graph": tg.name, "seeded": True, **counts, "users": sorted(DEMO_USERS)}
+    mark_practice_ready(tg)
+    return {"graph": tg.name, "seeded": True, "story": False, **counts, "users": sorted(DEMO_USERS)}
 
 
 def main(argv=None) -> int:

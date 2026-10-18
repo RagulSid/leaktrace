@@ -10,7 +10,8 @@ Resets the tenant, then:
   4. the knowledge update: repair ticket TCK-1077 says V-09 works again;
   5. S1 again: the rescue plan through V-09 is back, waiting for an operator's OK.
 Ask LeakTrace can then answer "Why did we avoid valve V-09?" from problem 3, with its sources.
-Everything is practice data. Needs LEAKTRACE_DEMO_PASSWORD.
+Everything is practice data. Needs LEAKTRACE_DEMO_PASSWORD (shared practice password) and
+LEAKTRACE_MANAGER_PASSWORD (manager and meters accounts; defaults to the shared one when unset).
 """
 
 import argparse
@@ -21,6 +22,8 @@ import sys
 import time
 
 from app import config  # noqa: F401  (loads .env, where LEAKTRACE_DEMO_PASSWORD lives)
+from app.cli import mark_practice_ready
+from app.graph.client import TenantGraph
 from scenario_generator import knowledge
 from scenario_generator.field import FieldWorker
 from scenario_generator.plant import Plant
@@ -39,10 +42,11 @@ def _s1_by_helpers(sess: Session, seed: int, scen: dict | None = None, incident:
     return incident
 
 
-def seed(tenant: str, password: str | None = None) -> dict:
+def seed(tenant: str, password: str | None = None, manager_password: str | None = None) -> dict:
     password = password or os.environ["LEAKTRACE_DEMO_PASSWORD"]
-    s5 = run_helpers("s5", "auto", tenant, 3, reset=True, password=password)
-    sess = Session(tenant, password)
+    manager_password = manager_password or os.getenv("LEAKTRACE_MANAGER_PASSWORD") or password
+    s5 = run_helpers("s5", "auto", tenant, 3, reset=True, password=password, manager_password=manager_password)
+    sess = Session(tenant, password, manager_password=manager_password)
     # The manager sets the emergency wait to its longest (1 hour) so the "needs your OK" plan stays waiting
     # while people look at it; with the pack's 5 minutes the emergency rule would act on it (as designed).
     sess.c.put("/policies/POL-DC-1", json={"changes": {"break_glass_wait_s": 3600}}, headers=sess.headers("manager1")).raise_for_status()
@@ -56,6 +60,7 @@ def seed(tenant: str, password: str | None = None) -> dict:
     waiting = sess.post("/readings", "meters1", {"readings": leak, "source": "synthetic"})["incidents"]["LS-A1"]
     _s1_by_helpers(sess, 8, incident=waiting)
     d = _latest_decision(sess, waiting) or {}
+    mark_practice_ready(TenantGraph(tenant))  # last: /health says "seeded" only now
     return {"auto_problem": s5["incident"], "auto_status": s5["final"]["status"], "avoided_v09_problem": avoided,
             "waiting_problem": waiting, "waiting": {k: d.get(k) for k in ("kind", "status", "authority_level")}}
 

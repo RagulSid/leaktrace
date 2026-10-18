@@ -45,11 +45,12 @@ def _graph_down(request: Request, e: GraphUnavailable):
 
 @app.get("/health")
 def health():
-    """Is FalkorDB reachable, and is the demo customer seeded (users and a map)? Two yes/no answers, no ids."""
+    """Is FalkorDB reachable, and is the demo customer's practice data complete (users, the map, and the end-of-seed
+    marker)? Two yes/no answers, no ids."""
     reachable = demo_seeded = False
     try:
         counts = seeded(TenantGraph(config.DEMO_TENANT))
-        reachable, demo_seeded = True, counts["users"] > 0 and counts["entities"] > 0
+        reachable, demo_seeded = True, counts["users"] > 0 and counts["entities"] > 0 and counts["ready"] > 0
     except GraphUnavailable as e:
         reachable = e.reason == "graph_empty"
     return JSONResponse(status_code=200 if reachable and demo_seeded else 503,

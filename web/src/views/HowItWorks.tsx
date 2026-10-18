@@ -203,6 +203,11 @@ function Versus({ ev }: { ev: any }) {
           ))}</tbody>
         </table>
       </div>
+      <h3>{H.versusShows}</h3>
+      <ul className="small">
+        {Object.entries(ev.notes || {}).map(([k, v]) => <li key={k}><b>{k}</b>: {String(v)}</li>)}
+      </ul>
+      <h3>{H.versusArms}</h3>
       <ul className="small">
         {Object.entries(ev.cases || {}).map(([k, v]) => <li key={k}><b>{k}</b>: {String(v)}</li>)}
         {Object.entries(ev.approaches || {}).map(([k, v]) => <li key={k}><b>{k}</b>: {String(v)}</li>)}
